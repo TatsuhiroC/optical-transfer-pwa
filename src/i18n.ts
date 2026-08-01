@@ -77,6 +77,7 @@ const en: Dict = {
   "receive.capFail": "failed",
   "receive.receiving": "Receiving",
   "receive.framesSuffix": "frames",
+  "receive.restart": "Restart",
 
   "m.cap": "capture fps",
   "m.dec": "decode fps",
@@ -156,6 +157,7 @@ const zh: Dict = {
   "receive.capFail": "失败",
   "receive.receiving": "正在接收",
   "receive.framesSuffix": "帧",
+  "receive.restart": "重新接收",
 
   "m.cap": "采集帧率",
   "m.dec": "解码帧率",
