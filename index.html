@@ -8,50 +8,56 @@
     />
     <meta name="theme-color" content="#121009" />
     <title>Optical Transfer — fountain QR file transfer</title>
-    <script type="module" crossorigin src="./assets/index-D4h_ZCF0.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CWSbCc8r.css">
+    <script type="module" crossorigin src="./assets/index-Dahkeg4H.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Cy35SrIe.css">
   <link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
   <body>
-    <h1>DECIMEN <small>— Fountain QR File Transfer</small></h1>
-    <nav class="mode" id="mode">
-      <a href="#/send" id="nav-send">send</a>
-      <a href="#/receive" id="nav-receive">receive</a>
-    </nav>
+    <header class="topbar">
+      <h1>DECIMEN <small>— Fountain QR File Transfer</small></h1>
+      <nav class="mode" id="mode">
+        <a href="#/send" id="nav-send" data-i18n="nav.send">send</a>
+        <a href="#/receive" id="nav-receive" data-i18n="nav.receive">receive</a>
+      </nav>
+      <button id="lang-btn" class="ghost small">中文</button>
+    </header>
 
     <!-- landing -->
     <section id="view-landing" class="view">
-      <p class="hint">
+      <p class="hint" data-i18n="landing.hint1">
         One app, two roles — the same device can transmit or receive, just
         pick a role. Files travel as an endless stream of fountain-coded QR
         codes; the other device points its camera at the screen. No network
         path is used, nothing to pair, nothing to install on the other side.
       </p>
       <div class="role-buttons">
-        <button id="btn-send">Send a file</button>
-        <button id="btn-receive">Receive</button>
+        <button id="btn-send" data-i18n="landing.send">Send a file</button>
+        <button id="btn-receive" data-i18n="landing.receive">Receive</button>
       </div>
     </section>
 
     <!-- send -->
     <section id="view-send" class="view" hidden>
-      <div class="hint" id="specs">choose a file to transmit</div>
+      <div class="hint" id="specs" data-i18n="send.choose">choose a file to transmit</div>
       <div class="dropzone" id="dropzone">
         <div class="dz-main">
-          drag &amp; drop a file here, or
+          <span data-i18n="send.drop">drag &amp; drop a file here, or</span>
           <div class="actions">
-            <button type="button" id="btn-file" class="small">choose file</button>
-            <button type="button" id="btn-photo" class="small">photo / album</button>
+            <button type="button" id="btn-file" class="small" data-i18n="send.btnFile">choose file</button>
+            <button type="button" id="btn-photo" class="small" data-i18n="send.btnPhoto">photo / album</button>
           </div>
         </div>
         <input id="file-input" type="file" hidden />
         <input id="photo-input" type="file" accept="image/*" hidden />
       </div>
-      <div class="file-meta" id="file-meta" hidden></div>
+      <div class="file-meta" id="file-meta" hidden>
+        <span id="file-meta-text"></span>
+        <button type="button" id="file-clear" class="clear-btn" title="remove file">×</button>
+      </div>
       <details class="settings">
-        <summary>Settings</summary>
+        <summary data-i18n="send.settings">Settings</summary>
         <div class="row">
           <label>
-            tx fps
+            <span data-i18n="send.txFps">tx fps</span>
             <select id="cfg-fps">
               <option>10</option>
               <option>15</option>
@@ -62,7 +68,7 @@
             </select>
           </label>
           <label>
-            bytes / frame
+            <span data-i18n="send.bytes">bytes / frame</span>
             <select id="cfg-bytes">
               <option>500</option>
               <option>1000</option>
@@ -73,7 +79,7 @@
             </select>
           </label>
           <label>
-            error correction
+            <span data-i18n="send.ecc">error correction</span>
             <select id="cfg-ecc">
               <option selected>L</option>
               <option>M</option>
@@ -82,22 +88,22 @@
             </select>
           </label>
           <label>
-            display size
+            <span data-i18n="send.size">display size</span>
             <input id="cfg-size" type="range" min="300" max="1200" step="50" value="900" />
           </label>
         </div>
-        <div class="hint" style="text-align: left; padding-top: 8px">
+        <div class="hint" style="text-align: left; padding-top: 8px" data-i18n="send.settingsHint">
           Changes restart the stream — the receiver resets automatically (new
           session id in the frame headers; that's the fountain protocol's gift).
         </div>
       </details>
       <div class="stage" id="stage" hidden><canvas id="qr" width="16" height="16"></canvas></div>
       <div class="actions" id="tx-actions" hidden>
-        <button type="button" id="btn-stop" class="ghost small">stop</button>
-        <button type="button" id="btn-resend" class="ghost small" hidden>resend</button>
+        <button type="button" id="btn-stop" class="ghost small" data-i18n="send.stop">stop</button>
+        <button type="button" id="btn-resend" class="ghost small" hidden data-i18n="send.resend">resend</button>
       </div>
       <div class="hint" id="tx-progress" hidden></div>
-      <div class="hint">
+      <div class="hint" data-i18n="send.hint">
         Max screen brightness helps. Keep the stream running until the
         receiver says done.
       </div>
@@ -105,55 +111,59 @@
 
     <!-- receive -->
     <section id="view-receive" class="view" hidden>
-      <div class="hint" id="stats">point the camera at the sender's code</div>
-      <details class="settings" id="settings">
-        <summary>Settings</summary>
-        <div class="row">
-          <label>
-            capture width
-            <select id="cfg-width">
-              <option>960</option>
-              <option selected>1280</option>
-              <option>1920</option>
-            </select>
-          </label>
-          <label>
-            capture fps
-            <select id="cfg-capfps">
-              <option>30</option>
-              <option selected>60</option>
-            </select>
-          </label>
-          <label>
-            decode workers
-            <select id="cfg-workers">
-              <option>1</option>
-              <option selected>2</option>
-              <option>3</option>
-            </select>
-          </label>
+      <div class="hint" id="stats" data-i18n="receive.stats">point the camera at the sender's code</div>
+      <div class="rx-panel">
+        <details class="settings" id="settings">
+          <summary data-i18n="receive.settings">Settings</summary>
+          <div class="row">
+            <label>
+              <span data-i18n="receive.capWidth">capture width</span>
+              <select id="cfg-width">
+                <option>960</option>
+                <option selected>1280</option>
+                <option>1920</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="receive.capFps">capture fps</span>
+              <select id="cfg-capfps">
+                <option>30</option>
+                <option selected>60</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="receive.workers">decode workers</span>
+              <select id="cfg-workers">
+                <option>1</option>
+                <option selected>2</option>
+                <option>3</option>
+              </select>
+            </label>
+          </div>
+          <div class="hint" style="text-align: left; padding-top: 8px" data-i18n="receive.settingsHint">
+            Set before starting the camera. 1280-wide is the widest mode iOS runs
+            at a true 60 fps; the fps request is demanded with `exact` first
+            because `ideal: 60` silently delivers 30.
+          </div>
+        </details>
+        <button id="start" data-i18n="receive.start">Start camera</button>
+      </div>
+      <div class="rx-stage" id="rx-stage" hidden>
+        <div class="preview"><video id="video" muted playsinline></video></div>
+        <div class="progress"><div id="bar"></div></div>
+        <div class="speed-row" id="speed-row">
+          <div class="metric"><div class="k" data-i18n="m.cap">capture fps</div><div class="v" id="m-cap">—</div></div>
+          <div class="metric"><div class="k" data-i18n="m.dec">decode fps</div><div class="v amber" id="m-dec">—</div></div>
+          <div class="metric"><div class="k" data-i18n="m.rate">goodput</div><div class="v amber" id="m-rate">—</div></div>
         </div>
-        <div class="hint" style="text-align: left; padding-top: 8px">
-          Set before starting the camera. 1280-wide is the widest mode iOS runs
-          at a true 60 fps; the fps request is demanded with `exact` first
-          because `ideal: 60` silently delivers 30.
-        </div>
-      </details>
-      <button id="start">Start camera</button>
+      </div>
       <div class="metrics" id="metrics" style="display: none">
-        <div class="metric"><div class="k">capture fps</div><div class="v" id="m-cap">—</div></div>
-        <div class="metric"><div class="k">decode fps</div><div class="v amber" id="m-dec">—</div></div>
-        <div class="metric"><div class="k">goodput</div><div class="v amber" id="m-rate">—</div></div>
-        <div class="metric"><div class="k">elapsed</div><div class="v" id="m-time">—</div></div>
-        <div class="metric"><div class="k">frames new/dup</div><div class="v" id="m-frames">—</div></div>
-        <div class="metric"><div class="k">blocks K</div><div class="v" id="m-k">—</div></div>
-        <div class="metric"><div class="k">block len</div><div class="v" id="m-block">—</div></div>
-        <div class="metric"><div class="k">payload</div><div class="v" id="m-payload">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.time">elapsed</div><div class="v" id="m-time">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.frames">frames new/dup</div><div class="v" id="m-frames">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.k">blocks K</div><div class="v" id="m-k">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.block">block len</div><div class="v" id="m-block">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.payload">payload</div><div class="v" id="m-payload">—</div></div>
       </div>
-      <div class="preview" id="preview" style="display: none">
-        <video id="video" muted playsinline></video>
-      </div>
-      <div class="progress" id="progress" style="display: none"><div id="bar"></div></div>
       <div id="result"></div>
     </section>
 
