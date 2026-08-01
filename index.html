@@ -8,8 +8,8 @@
     />
     <meta name="theme-color" content="#090b10" />
     <title>光传输 — 喷泉码二维码文件传输</title>
-    <script type="module" crossorigin src="./assets/index-CHXqayPS.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CtUnnD61.css">
+    <script type="module" crossorigin src="./assets/index-CETngcyO.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BPbVHmnu.css">
   <link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
   <body>
     <header class="topbar">
@@ -23,21 +23,28 @@
 
     <!-- landing -->
     <section id="view-landing" class="view">
+      <header class="app-header">
+        <div class="eyebrow">DECIMEN · OPTICAL TRANSFER</div>
+        <h1 data-i18n="landing.title">光码互传</h1>
+        <p data-i18n="landing.subtitle">一个应用，两种角色——文件化作光传输。不联网、不配对。</p>
+      </header>
       <p class="hint" data-i18n="landing.hint1">
-        One app, two roles — the same device can transmit or receive, just
-        pick a role. Files travel as an endless stream of fountain-coded QR
-        codes; the other device points its camera at the screen. No network
-        path is used, nothing to pair, nothing to install on the other side.
+        两台设备装同一应用：一台发送、一台接收——屏幕对镜头。
       </p>
       <div class="role-buttons">
-        <button id="btn-send" data-i18n="landing.send">Send a file</button>
-        <button id="btn-receive" data-i18n="landing.receive">Receive</button>
+        <button id="btn-send" data-i18n="landing.send">发送文件</button>
+        <button id="btn-receive" data-i18n="landing.receive">接收</button>
       </div>
     </section>
 
     <!-- send -->
     <section id="view-send" class="view" hidden>
-      <div class="hint" id="specs" data-i18n="send.choose">choose a file to transmit</div>
+      <header class="app-header">
+        <div class="eyebrow">QRSEND · OPTICAL TRANSMITTER</div>
+        <h1 data-i18n="send.title">光码发送器</h1>
+        <p data-i18n="send.subtitle">选择任意文件，屏幕化作一束光码。</p>
+      </header>
+      <div class="hint status-pill" id="specs" data-i18n="send.choose">选择要发送的文件</div>
       <div class="dropzone" id="dropzone">
         <div class="dz-main">
           <span data-i18n="send.drop">drag &amp; drop a file here, or</span>
@@ -110,7 +117,7 @@
     </section>
 
     <!-- receive (UI matches qrrec.liuwa.xyz) -->
-    <section id="view-receive" class="view rx" hidden>
+    <section id="view-receive" class="view" hidden>
       <header class="app-header">
         <div class="eyebrow">
           QRREC · OPTICAL RECEIVER
