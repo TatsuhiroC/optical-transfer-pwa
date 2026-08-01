@@ -9,20 +9,21 @@ network path between the devices, no pairing, no server.**
 QR 码流，另一台用摄像头对准屏幕，即可还原文件。**两台设备之间没有任何
 网络路径，无需配对，无需服务器。**
 
-> **This repo's live instance / 本仓库线上实例:**
-> <https://tatsuhiroc.github.io/optical-transfer-pwa/>
+
+**This repo's live instance / 本仓库线上实例:**
+** <https://tatsuhiroc.github.io/optical-transfer-pwa/> **
 
 
-This is a PWA fork of
-[decimen-optical-transfer](https://github.com/bashalarmistalt/decimen-optical-transfer)
-(MIT) that merges the original separate `send`/`receive` pages into **one
-installable app with both roles**, and lets the sender pick **any local file**
-instead of the two bundled test images.
+> This is a PWA fork of
+> [decimen-optical-transfer](https://github.com/bashalarmistalt/decimen-optical-transfer)
+> (MIT) that merges the original separate `send`/`receive` pages into **one
+> installable app with both roles**, and lets the sender pick **any local file**
+> instead of the two bundled test images.
 
-本项目是 [decimen-optical-transfer](https://github.com/bashalarmistalt/decimen-optical-transfer)
-(MIT) 的 PWA 版本：把原版分离的 `send`/`receive` 两个页面合并成**一个可
-安装、同时具备发送与接收两种角色的应用**，发送端也改为可以**选择任意本地
-文件**，而非原版内置的两张测试图片。
+> 本项目是 [decimen-optical-transfer](https://github.com/bashalarmistalt/decimen-optical-transfer)
+> (MIT) 的 PWA 版本：把原版分离的 `send`/`receive` 两个页面合并成**一个可
+> 安装、同时具备发送与接收两种角色的应用**，发送端也改为可以**选择任意本地
+> 文件**，而非原版内置的两张测试图片。
 
 ## Features / 功能
 
