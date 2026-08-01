@@ -72,6 +72,7 @@ function showFileMeta() {
   const p = store.pending;
   if (!p) return;
   const kb = Math.max(1, Math.round(p.payload.length / 1024));
+  dropzone.hidden = true; // the picker gives way to the picked file card
   fileMeta.hidden = false;
   fileClear.hidden = false;
   fileMetaText.textContent = `${p.name} · ${kb} KB · ${p.mime}`;
@@ -82,6 +83,7 @@ function clearSelection() {
   pickSeq++; // any in-flight file read is now stale
   active = false;
   store.pending = null;
+  dropzone.hidden = false; // the picker comes back
   fileMeta.hidden = true;
   stage.hidden = true;
   txActions.hidden = true;

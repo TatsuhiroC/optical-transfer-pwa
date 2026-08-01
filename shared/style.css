@@ -207,19 +207,30 @@ button.small {
 .file-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(92vw, 640px);
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel);
   color: var(--text);
   font-size: 13px;
-  text-align: center;
+  text-align: left;
+}
+.file-meta[hidden],
+.dropzone[hidden] {
+  display: none;
 }
 .clear-btn {
   font: inherit;
+  flex: 0 0 auto;
   color: var(--muted);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   line-height: 1;
   font-size: 16px;
