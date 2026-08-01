@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#121009" />
+    <title>Optical Transfer — fountain QR file transfer</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+  </head>
+  <body>
+    <h1>DECIMEN <small>— Fountain QR File Transfer</small></h1>
+    <nav class="mode" id="mode">
+      <a href="#/send" id="nav-send">send</a>
+      <a href="#/receive" id="nav-receive">receive</a>
+    </nav>
+
+    <!-- landing -->
+    <section id="view-landing" class="view">
+      <p class="hint">
+        One app, two roles — the same device can transmit or receive, just
+        pick a role. Files travel as an endless stream of fountain-coded QR
+        codes; the other device points its camera at the screen. No network
+        path is used, nothing to pair, nothing to install on the other side.
+      </p>
+      <div class="role-buttons">
+        <button id="btn-send">Send a file</button>
+        <button id="btn-receive">Receive</button>
+      </div>
+    </section>
+
+    <!-- send -->
+    <section id="view-send" class="view" hidden>
+      <div class="hint" id="specs">choose a file to transmit</div>
+      <div class="dropzone" id="dropzone">
+        <div class="dz-main">
+          drag &amp; drop a file here, or
+          <div class="actions">
+            <button type="button" id="btn-file" class="small">choose file</button>
+            <button type="button" id="btn-photo" class="small">photo / album</button>
+          </div>
+        </div>
+        <input id="file-input" type="file" hidden />
+        <input id="photo-input" type="file" accept="image/*" hidden />
+      </div>
+      <div class="file-meta" id="file-meta" hidden></div>
+      <details class="settings">
+        <summary>Settings</summary>
+        <div class="row">
+          <label>
+            tx fps
+            <select id="cfg-fps">
+              <option>10</option>
+              <option>15</option>
+              <option>20</option>
+              <option selected>24</option>
+              <option>30</option>
+              <option>60</option>
+            </select>
+          </label>
+          <label>
+            bytes / frame
+            <select id="cfg-bytes">
+              <option>500</option>
+              <option>1000</option>
+              <option selected>1465</option>
+              <option>1850</option>
+              <option>2331</option>
+              <option>2953</option>
+            </select>
+          </label>
+          <label>
+            error correction
+            <select id="cfg-ecc">
+              <option selected>L</option>
+              <option>M</option>
+              <option>Q</option>
+              <option>H</option>
+            </select>
+          </label>
+          <label>
+            display size
+            <input id="cfg-size" type="range" min="300" max="1200" step="50" value="900" />
+          </label>
+        </div>
+        <div class="hint" style="text-align: left; padding-top: 8px">
+          Changes restart the stream — the receiver resets automatically (new
+          session id in the frame headers; that's the fountain protocol's gift).
+        </div>
+      </details>
+      <div class="stage" id="stage" hidden><canvas id="qr" width="16" height="16"></canvas></div>
+      <div class="actions" id="tx-actions" hidden>
+        <button type="button" id="btn-stop" class="ghost small">stop</button>
+        <button type="button" id="btn-resend" class="ghost small" hidden>resend</button>
+      </div>
+      <div class="hint" id="tx-progress" hidden></div>
+      <div class="hint">
+        Max screen brightness helps. Keep the stream running until the
+        receiver says done.
+      </div>
+    </section>
+
+    <!-- receive -->
+    <section id="view-receive" class="view" hidden>
+      <div class="hint" id="stats">point the camera at the sender's code</div>
+      <details class="settings" id="settings">
+        <summary>Settings</summary>
+        <div class="row">
+          <label>
+            capture width
+            <select id="cfg-width">
+              <option>960</option>
+              <option selected>1280</option>
+              <option>1920</option>
+            </select>
+          </label>
+          <label>
+            capture fps
+            <select id="cfg-capfps">
+              <option>30</option>
+              <option selected>60</option>
+            </select>
+          </label>
+          <label>
+            decode workers
+            <select id="cfg-workers">
+              <option>1</option>
+              <option selected>2</option>
+              <option>3</option>
+            </select>
+          </label>
+        </div>
+        <div class="hint" style="text-align: left; padding-top: 8px">
+          Set before starting the camera. 1280-wide is the widest mode iOS runs
+          at a true 60 fps; the fps request is demanded with `exact` first
+          because `ideal: 60` silently delivers 30.
+        </div>
+      </details>
+      <button id="start">Start camera</button>
+      <div class="metrics" id="metrics" style="display: none">
+        <div class="metric"><div class="k">capture fps</div><div class="v" id="m-cap">—</div></div>
+        <div class="metric"><div class="k">decode fps</div><div class="v amber" id="m-dec">—</div></div>
+        <div class="metric"><div class="k">goodput</div><div class="v amber" id="m-rate">—</div></div>
+        <div class="metric"><div class="k">elapsed</div><div class="v" id="m-time">—</div></div>
+        <div class="metric"><div class="k">frames new/dup</div><div class="v" id="m-frames">—</div></div>
+        <div class="metric"><div class="k">blocks K</div><div class="v" id="m-k">—</div></div>
+        <div class="metric"><div class="k">block len</div><div class="v" id="m-block">—</div></div>
+        <div class="metric"><div class="k">payload</div><div class="v" id="m-payload">—</div></div>
+      </div>
+      <div class="preview" id="preview" style="display: none">
+        <video id="video" muted playsinline></video>
+      </div>
+      <div class="progress" id="progress" style="display: none"><div id="bar"></div></div>
+      <div id="result"></div>
+    </section>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
