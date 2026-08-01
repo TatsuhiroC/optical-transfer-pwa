@@ -4,6 +4,7 @@
 
 import { enterSend, exitSend } from "./send";
 import { enterReceive, exitReceive } from "./receive";
+import { initI18n } from "./i18n";
 
 const $ = (id: string) => document.getElementById(id)!;
 const views = {
@@ -42,4 +43,5 @@ $("btn-send").onclick = () => {
 $("btn-receive").onclick = () => {
   location.hash = "#/receive";
 };
+initI18n();
 route();
