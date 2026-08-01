@@ -10,8 +10,12 @@ QR 码流，另一台用摄像头对准屏幕，即可还原文件。**两台设
 网络路径，无需配对，无需服务器。**
 
 
+
+
 **This repo's live instance / 本仓库线上实例:**
-** <https://tatsuhiroc.github.io/optical-transfer-pwa/> **
+ <https://tatsuhiroc.github.io/optical-transfer-pwa/> 
+
+
 
 
 > This is a PWA fork of
