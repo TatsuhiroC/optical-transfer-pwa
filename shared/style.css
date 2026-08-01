@@ -31,6 +31,7 @@ body {
   background: radial-gradient(circle at 50% -10%, rgba(255, 91, 113, 0.17), transparent 38%),
     var(--bg);
   font: 15px/1.55 -apple-system, BlinkMacSystemFont, PingFang SC, Segoe UI, sans-serif;
+  overflow-x: hidden; /* never let long content widen the page on phones */
 }
 
 /* each view is its own centered column with breathing room between modules */
@@ -40,6 +41,7 @@ body {
   align-items: center;
   gap: 18px;
   width: 100%;
+  min-width: 0; /* flex children of body must be allowed to shrink */
 }
 .view[hidden] {
   display: none;
@@ -153,6 +155,22 @@ button.small {
   font-size: 13px;
   text-align: center;
   max-width: 640px;
+}
+/* long file names / summaries must wrap anywhere instead of widening the
+   page on narrow (phone) viewports */
+.status-pill,
+.file-meta,
+#file-meta-text,
+#tx-progress,
+#result,
+img.received {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+#file-meta-text {
+  flex: 1;
+  min-width: 0;
 }
 .hint.left {
   padding-top: 9px;
