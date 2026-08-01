@@ -10,11 +10,15 @@ const en: Dict = {
   "nav.send": "send",
   "nav.receive": "receive",
   "lang.toggle": "中文",
+  "landing.title": "Optical Transfer",
+  "landing.subtitle": "One app, two roles — files travel as light. No network, no pairing.",
   "landing.hint1":
-    "One app, two roles — the same device can transmit or receive, just pick a role. Files travel as an endless stream of fountain-coded QR codes; the other device points its camera at the screen. No network path is used, nothing to pair, nothing to install on the other side.",
+    "Two devices run the same app: one sends, one receives — screen to camera.",
   "landing.send": "Send a file",
   "landing.receive": "Receive",
 
+  "send.title": "Light-Code Sender",
+  "send.subtitle": "Pick any file — the screen becomes a stream of light.",
   "send.choose": "choose a file to transmit",
   "send.drop": "drag & drop a file here, or",
   "send.btnFile": "choose file",
@@ -88,11 +92,14 @@ const zh: Dict = {
   "nav.send": "发送",
   "nav.receive": "接收",
   "lang.toggle": "EN",
-  "landing.hint1":
-    "一个应用、两种角色——同一台设备既能发送也能接收，选一个角色即可。文件会变成源源不断的喷泉码动态二维码；另一台设备用摄像头对准屏幕就能还原。设备之间不经过任何网络，无需配对，对方也无需安装任何东西。",
+  "landing.title": "光码互传",
+  "landing.subtitle": "一个应用，两种角色——文件化作光传输。不联网、不配对。",
+  "landing.hint1": "两台设备装同一应用：一台发送、一台接收——屏幕对镜头。",
   "landing.send": "发送文件",
   "landing.receive": "接收",
 
+  "send.title": "光码发送器",
+  "send.subtitle": "选择任意文件，屏幕化作一束光码。",
   "send.choose": "选择要发送的文件",
   "send.drop": "把文件拖到这里，或",
   "send.btnFile": "选择文件",
