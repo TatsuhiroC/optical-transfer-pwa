@@ -35,6 +35,7 @@ const progressPercent = $("progress-percent");
 const result = $("result");
 const settings = $("settings") as HTMLDetailsElement;
 const metricsEl = $("metrics");
+const restartBtn = $("restart") as HTMLButtonElement;
 const metric = (id: string) => $(id);
 const pulses = [...$("frame-pulses").children] as HTMLElement[];
 
@@ -116,7 +117,12 @@ async function start() {
   video.srcObject = stream;
   await video.play().catch(() => undefined);
   stats.textContent = t("receive.searching");
+  restartBtn.style.display = "block"; // restart is available while scanning
 
+  // tear down any workers from a previous session, then spin up fresh ones
+  for (const w of workers) w.terminate();
+  workers.length = 0;
+  busy.length = 0;
   for (let i = 0; i < workerCount; i++) {
     const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     const slot = i;
@@ -318,11 +324,18 @@ function updateStats() {
   metric("m-payload").textContent = `${Math.round(decoder.totalLen / 1024)} KB`;
 }
 
-export function enterReceive() {
-  // Fresh session: a previous transfer must not block the next one.
+/** Back to the very start: stop the camera + capture loop, drop the
+ * decoder state, clear the result area, restore settings/start and the
+ * capability pills. Used by re-entering the view AND by the restart
+ * button (both while scanning and after a completed transfer). */
+function resetReceive() {
   done = false;
+  captureGen++;
+  stream?.getTracks().forEach((t) => t.stop());
+  clearInterval(statsTimer);
   decoder = null;
   sessionId = 0;
+  pulseIdx = 0;
   result.innerHTML = "";
   bar.style.width = "0%";
   progressPercent.textContent = "0%";
@@ -330,6 +343,7 @@ export function enterReceive() {
   progressEl.style.display = "none";
   preview.style.display = "none";
   metricsEl.style.display = "none";
+  restartBtn.style.display = "none";
   settings.style.display = "";
   startBtn.style.display = "";
   capSet("cap-camera", "", t("receive.capPendingCam"));
@@ -337,6 +351,12 @@ export function enterReceive() {
   capSet("cap-wasm", "", t("receive.capPending"));
   capSet("cap-secure", window.isSecureContext ? "pass" : "fail", window.isSecureContext ? t("receive.capPass") : t("receive.capFail"));
   stats.textContent = t("receive.stats");
+}
+
+restartBtn.onclick = resetReceive;
+
+export function enterReceive() {
+  resetReceive();
 }
 
 export function exitReceive() {
