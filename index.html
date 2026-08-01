@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
     />
-    <meta name="theme-color" content="#121009" />
-    <title>Optical Transfer — fountain QR file transfer</title>
-    <script type="module" crossorigin src="./assets/index-Dahkeg4H.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Cy35SrIe.css">
+    <meta name="theme-color" content="#090b10" />
+    <title>光传输 — 喷泉码二维码文件传输</title>
+    <script type="module" crossorigin src="./assets/index-CHXqayPS.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CtUnnD61.css">
   <link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
   <body>
     <header class="topbar">
@@ -18,7 +18,7 @@
         <a href="#/send" id="nav-send" data-i18n="nav.send">send</a>
         <a href="#/receive" id="nav-receive" data-i18n="nav.receive">receive</a>
       </nav>
-      <button id="lang-btn" class="ghost small">中文</button>
+      <button id="lang-btn" class="js-lang-btn ghost small">中文</button>
     </header>
 
     <!-- landing -->
@@ -109,61 +109,85 @@
       </div>
     </section>
 
-    <!-- receive -->
-    <section id="view-receive" class="view" hidden>
-      <div class="hint" id="stats" data-i18n="receive.stats">point the camera at the sender's code</div>
-      <div class="rx-panel">
-        <details class="settings" id="settings">
-          <summary data-i18n="receive.settings">Settings</summary>
-          <div class="row">
-            <label>
-              <span data-i18n="receive.capWidth">capture width</span>
-              <select id="cfg-width">
-                <option>960</option>
-                <option selected>1280</option>
-                <option>1920</option>
-              </select>
-            </label>
-            <label>
-              <span data-i18n="receive.capFps">capture fps</span>
-              <select id="cfg-capfps">
-                <option>30</option>
-                <option selected>60</option>
-              </select>
-            </label>
-            <label>
-              <span data-i18n="receive.workers">decode workers</span>
-              <select id="cfg-workers">
-                <option>1</option>
-                <option selected>2</option>
-                <option>3</option>
-              </select>
-            </label>
-          </div>
-          <div class="hint" style="text-align: left; padding-top: 8px" data-i18n="receive.settingsHint">
-            Set before starting the camera. 1280-wide is the widest mode iOS runs
-            at a true 60 fps; the fps request is demanded with `exact` first
-            because `ideal: 60` silently delivers 30.
-          </div>
-        </details>
-        <button id="start" data-i18n="receive.start">Start camera</button>
-      </div>
-      <div class="rx-stage" id="rx-stage" hidden>
-        <div class="preview"><video id="video" muted playsinline></video></div>
-        <div class="progress"><div id="bar"></div></div>
-        <div class="speed-row" id="speed-row">
-          <div class="metric"><div class="k" data-i18n="m.cap">capture fps</div><div class="v" id="m-cap">—</div></div>
-          <div class="metric"><div class="k" data-i18n="m.dec">decode fps</div><div class="v amber" id="m-dec">—</div></div>
-          <div class="metric"><div class="k" data-i18n="m.rate">goodput</div><div class="v amber" id="m-rate">—</div></div>
+    <!-- receive (UI matches qrrec.liuwa.xyz) -->
+    <section id="view-receive" class="view rx" hidden>
+      <header class="app-header">
+        <div class="eyebrow">
+          QRREC · OPTICAL RECEIVER
+          <button type="button" class="js-lang-btn rx-lang" data-i18n="lang.toggle">中文</button>
         </div>
-      </div>
+        <h1 data-i18n="receive.rxTitle">光码接收器</h1>
+        <p data-i18n="receive.rxSubtitle">无需上传。让摄像头对准发送设备上的动态二维码。</p>
+      </header>
+      <div class="hint status-pill" id="stats" data-i18n="receive.stats">准备接收光码</div>
+      <section class="capabilities" aria-label="运行能力">
+        <div id="cap-secure"><span></span><small data-i18n="receive.capSecure">安全环境</small><b id="cap-secure-v" data-i18n="receive.capCheck">检测中</b></div>
+        <div id="cap-camera"><span></span><small data-i18n="receive.capCamera">摄像头</small><b id="cap-camera-v" data-i18n="receive.capPendingCam">待授权</b></div>
+        <div id="cap-worker"><span></span><small>Worker</small><b id="cap-worker-v" data-i18n="receive.capPending">待启动</b></div>
+        <div id="cap-wasm"><span></span><small>WASM</small><b id="cap-wasm-v" data-i18n="receive.capPending">待启动</b></div>
+      </section>
+      <details class="settings" id="settings">
+        <summary data-i18n="receive.settings">摄像头设置</summary>
+        <div class="row">
+          <label class="camera-label">
+            <span data-i18n="receive.camera">摄像头</span>
+            <select id="cfg-camera">
+              <option value="" data-i18n="receive.camAuto">自动选择后置摄像头</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="receive.capWidth">采集宽度</span>
+            <select id="cfg-width">
+              <option>960</option>
+              <option selected>1280</option>
+              <option>1920</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="receive.capFps">采集帧率</span>
+            <select id="cfg-capfps">
+              <option>30</option>
+              <option selected>60</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="receive.workers">解码线程</span>
+            <select id="cfg-workers">
+              <option>1</option>
+              <option selected>2</option>
+              <option>3</option>
+            </select>
+          </label>
+        </div>
+        <div class="hint left" data-i18n="receive.settingsHint">
+          默认设置适合大多数手机。若识别困难，请保持设备稳定并调高发送端亮度。
+        </div>
+      </details>
+      <button id="start" data-i18n="receive.start">开启摄像头接收</button>
       <div class="metrics" id="metrics" style="display: none">
-        <div class="metric"><div class="k" data-i18n="m.time">elapsed</div><div class="v" id="m-time">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.frames">frames new/dup</div><div class="v" id="m-frames">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.k">blocks K</div><div class="v" id="m-k">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.block">block len</div><div class="v" id="m-block">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.payload">payload</div><div class="v" id="m-payload">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.cap">采集帧率</div><div class="v" id="m-cap">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.dec">解码帧率</div><div class="v amber" id="m-dec">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.rate">接收速度</div><div class="v amber" id="m-rate">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.time">已用时间</div><div class="v" id="m-time">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.frames">新帧/重复</div><div class="v" id="m-frames">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.k">源数据块</div><div class="v" id="m-k">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.block">单块大小</div><div class="v" id="m-block">—</div></div>
+        <div class="metric"><div class="k" data-i18n="m.payload">文件数据</div><div class="v" id="m-payload">—</div></div>
       </div>
+      <div class="preview" id="preview" style="display: none">
+        <video id="video" muted playsinline></video>
+        <div class="scan-guide"><span></span></div>
+      </div>
+      <section class="transfer-progress" id="progress" style="display: none">
+        <div class="progress-copy">
+          <div><strong data-i18n="receive.receiving">正在接收</strong><span id="progress-frames">0 / 0 帧</span></div>
+          <b id="progress-percent">0%</b>
+        </div>
+        <div class="progress"><div id="bar"></div></div>
+        <div class="frame-pulses" id="frame-pulses" aria-label="recent frames">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </section>
       <div id="result"></div>
     </section>
 
