@@ -1,13 +1,19 @@
 // Receive mode: camera → WASM QR decode in workers → fountain decoder → file.
 //
-// Scan settings and pipeline are unchanged from the original: capture width /
-// fps / worker count, `exact` fps demanded first (iOS lies with `ideal`),
+// UI follows the qrrec.liuwa.xyz receiver design (the user's reference):
+// capability pills (secure context / camera / worker / wasm), camera
+// settings, a big gradient start button, an 8-cell metric grid, a compact
+// camera preview with a scan guide, and a transfer panel with frame pulses.
+//
+// Pipeline is unchanged from the original: capture width / fps / worker
+// count, `exact` fps demanded first (iOS lies with `ideal`),
 // requestVideoFrameCallback with a generation counter against zombie capture
 // loops, progress tracking frames COLLECTED (LT peeling back-loads).
-// New: the frame name field shows up as the received file name, the result
-// offers save / share / send-onward, and the file name/type are verified
-// against magic bytes so a stream without a name (legacy frames) still lands
-// with the right extension (e.g. a WAV stays a .wav).
+//
+// Camera robustness fixes over the earlier build: a failed getUserMedia no
+// longer swallows the controls — settings and the start button come back, the
+// camera pill flips to fail with the reason, and a permission denial gets its
+// own message. Re-entering the view resets `done` so a second transfer works.
 
 import { LTDecoder } from "../shared/fountain";
 import { fnv1a, parseFrame } from "../shared/protocol";
@@ -17,17 +23,22 @@ import { t } from "./i18n";
 
 const OVERHEAD_EST = 1.18; // expected frames ≈ K × this (robust-soliton ε)
 
-const startBtn = document.getElementById("start") as HTMLButtonElement;
-const video = document.getElementById("video") as HTMLVideoElement;
-const rxStage = document.getElementById("rx-stage")!;
-const stats = document.getElementById("stats")!;
-const progressEl = document.getElementById("progress")!;
-const bar = document.getElementById("bar")!;
-const result = document.getElementById("result")!;
-const settings = document.getElementById("settings") as HTMLDetailsElement;
-const metricsEl = document.getElementById("metrics")!;
-const metric = (id: string) => document.getElementById(id)!;
+const $ = (id: string) => document.getElementById(id)!;
+const startBtn = $("start") as HTMLButtonElement;
+const video = $("video") as HTMLVideoElement;
+const preview = $("preview");
+const stats = $("stats");
+const progressEl = $("progress");
+const bar = $("bar");
+const progressFrames = $("progress-frames");
+const progressPercent = $("progress-percent");
+const result = $("result");
+const settings = $("settings") as HTMLDetailsElement;
+const metricsEl = $("metrics");
+const metric = (id: string) => $(id);
+const pulses = [...$("frame-pulses").children] as HTMLElement[];
 
+let pulseIdx = 0;
 let stream: MediaStream | null = null;
 let decoder: LTDecoder | null = null;
 let sessionId = 0;
@@ -41,23 +52,32 @@ const busy: boolean[] = [];
 const captureTimes: number[] = [];
 const decodeTimes: number[] = [];
 
+function capSet(id: string, state: "pass" | "fail" | "", text: string) {
+  const el = $(id);
+  el.classList.remove("pass", "fail");
+  if (state) el.classList.add(state);
+  const b = el.querySelector("b");
+  if (b) b.textContent = text;
+}
+
 startBtn.onclick = () => void start();
 
 async function start() {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    // On insecure origins the API doesn't exist AT ALL — this is the plain-
-    // http-over-LAN case. localhost is exempt; other hosts need https.
+  const secure = window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
+  if (!secure) {
+    capSet("cap-secure", "fail", t("receive.capFail"));
     stats.textContent = t("receive.secure");
     return;
   }
-  const captureWidth = Number((document.getElementById("cfg-width") as HTMLSelectElement).value);
-  const captureFps = Number((document.getElementById("cfg-capfps") as HTMLSelectElement).value);
-  const workerCount = Number((document.getElementById("cfg-workers") as HTMLSelectElement).value);
+  capSet("cap-secure", "pass", t("receive.capPass"));
+  const captureWidth = Number(($("cfg-width") as HTMLSelectElement).value);
+  const captureFps = Number(($("cfg-capfps") as HTMLSelectElement).value);
+  const workerCount = Number(($("cfg-workers") as HTMLSelectElement).value);
   settings.style.display = "none";
   startBtn.style.display = "none";
-  rxStage.style.display = "block";
-  progressEl.style.display = "block";
+  preview.style.display = "block";
   metricsEl.style.display = "grid";
+  progressEl.style.display = "block";
   const base: MediaTrackConstraints = {
     facingMode: "environment",
     width: { ideal: captureWidth },
@@ -76,29 +96,43 @@ async function start() {
       });
     }
   } catch (err) {
-    stats.textContent = t("receive.camErr", { msg: err instanceof Error ? err.message : String(err) });
+    // Camera failed — bring the controls back so the user can retry (e.g.
+    // after granting permission in settings), and say why.
+    settings.style.display = "";
+    startBtn.style.display = "";
+    preview.style.display = "none";
+    metricsEl.style.display = "none";
+    progressEl.style.display = "none";
+    capSet("cap-camera", "fail", t("receive.capFail"));
+    const denied =
+      err instanceof DOMException &&
+      (err.name === "NotAllowedError" || err.name === "PermissionDeniedError");
+    stats.textContent = denied
+      ? t("receive.camDenied")
+      : t("receive.camErr", { msg: err instanceof Error ? err.message : String(err) });
     return;
   }
+  capSet("cap-camera", "pass", t("receive.capPass"));
   video.srcObject = stream;
   await video.play().catch(() => undefined);
-  stats.textContent = t("receive.searching", {
-    w: stream.getVideoTracks()[0]?.getSettings().width ?? "?",
-    h: stream.getVideoTracks()[0]?.getSettings().height ?? "?",
-    fps: stream.getVideoTracks()[0]?.getSettings().frameRate ?? "?",
-  });
+  stats.textContent = t("receive.searching");
 
   for (let i = 0; i < workerCount; i++) {
     const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     const slot = i;
     w.onmessage = (e: MessageEvent) => {
       const { id, bytes } = e.data as { id: number; bytes: Uint8Array | null };
-      if (id === -1) return; // warm-up
+      if (id === -1) {
+        capSet("cap-wasm", "pass", t("receive.capPass"));
+        return; // warm-up
+      }
       busy[slot] = false;
       if (bytes) onDecoded(bytes);
     };
     workers.push(w);
     busy.push(false);
   }
+  capSet("cap-worker", "pass", t("receive.capPass"));
 
   captureGen++;
   scheduleFrame(captureGen);
@@ -149,6 +183,17 @@ function captureFrame() {
   ]);
 }
 
+/** Light one of the 24 pulse dots per fresh frame (ring buffer). */
+function pulse() {
+  const p = pulses[pulseIdx % pulses.length];
+  pulseIdx++;
+  if (p) {
+    p.classList.remove("active");
+    void p.offsetWidth; // restart the CSS transition
+    p.classList.add("active");
+  }
+}
+
 function onDecoded(bytes: Uint8Array) {
   decodeTimes.push(performance.now());
   const parsed = parseFrame(bytes);
@@ -158,10 +203,15 @@ function onDecoded(bytes: Uint8Array) {
     decoder = new LTDecoder(header.k, header.blockLen, header.sessionId, header.totalLen);
     sessionId = header.sessionId;
     startTs = performance.now();
+    pulseIdx = 0;
   }
   decoder.addFrame(header.seq, block);
-  const progress = Math.min(0.99, decoder.framesNew / (decoder.k * OVERHEAD_EST));
+  pulse();
+  const target = Math.ceil(decoder.k * OVERHEAD_EST);
+  const progress = Math.min(0.99, decoder.framesNew / target);
   bar.style.width = `${(progress * 100).toFixed(1)}%`;
+  progressPercent.textContent = `${(progress * 100).toFixed(0)}%`;
+  progressFrames.textContent = `${decoder.framesNew} / ${target} ${t("receive.framesSuffix")}`;
 
   if (decoder.isComplete) {
     const payload = decoder.assemble()!;
@@ -189,8 +239,9 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
   done = true;
   captureGen++;
   stream?.getTracks().forEach((t) => t.stop());
-  rxStage.style.display = "none";
+  preview.style.display = "none";
   bar.style.width = "100%";
+  progressPercent.textContent = "100%";
   const { fileName, mime } = resolveFileMeta(payload, name);
   const kb = Math.round(totalLen / 1024);
   const rate = (totalLen / 1024 / seconds).toFixed(1);
@@ -214,10 +265,8 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
     result.append(img);
   }
 
-  const actions = document.createElement("div");
-  actions.className = "actions";
   const dl = document.createElement("button");
-  dl.className = "small";
+  dl.className = "download-button";
   dl.textContent = t("receive.save");
   dl.onclick = () => {
     const a = document.createElement("a");
@@ -225,28 +274,27 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
     a.download = fileName;
     a.click();
   };
-  actions.append(dl);
+  result.append(dl);
 
   const file = new File([payload as BlobPart], fileName, { type: mime });
   if (navigator.share && navigator.canShare?.({ files: [file] })) {
     const share = document.createElement("button");
-    share.className = "small";
+    share.className = "secondary-button";
     share.textContent = t("receive.share");
     share.onclick = () => {
       void navigator.share({ files: [file] }).catch(() => undefined);
     };
-    actions.append(share);
+    result.append(share);
   }
 
   const fwd = document.createElement("button");
-  fwd.className = "ghost small";
+  fwd.className = "secondary-button";
   fwd.textContent = t("receive.forward");
   fwd.onclick = () => {
     store.pending = { payload, name: fileName, mime };
     location.hash = "#/send";
   };
-  actions.append(fwd);
-  result.append(actions);
+  result.append(fwd);
 }
 
 function updateStats() {
@@ -271,7 +319,24 @@ function updateStats() {
 }
 
 export function enterReceive() {
-  // camera starts only on the user's Start tap — nothing to do here
+  // Fresh session: a previous transfer must not block the next one.
+  done = false;
+  decoder = null;
+  sessionId = 0;
+  result.innerHTML = "";
+  bar.style.width = "0%";
+  progressPercent.textContent = "0%";
+  progressFrames.textContent = `0 / 0 ${t("receive.framesSuffix")}`;
+  progressEl.style.display = "none";
+  preview.style.display = "none";
+  metricsEl.style.display = "none";
+  settings.style.display = "";
+  startBtn.style.display = "";
+  capSet("cap-camera", "", t("receive.capPendingCam"));
+  capSet("cap-worker", "", t("receive.capPending"));
+  capSet("cap-wasm", "", t("receive.capPending"));
+  capSet("cap-secure", window.isSecureContext ? "pass" : "fail", window.isSecureContext ? t("receive.capPass") : t("receive.capFail"));
+  stats.textContent = t("receive.stats");
 }
 
 export function exitReceive() {

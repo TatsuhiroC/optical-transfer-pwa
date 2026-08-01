@@ -38,35 +38,49 @@ const en: Dict = {
   "send.genErr": "✗ {msg}",
   "send.progress": "frames sent: {n} · receiver needs ~{m} of any",
 
-  "receive.stats": "point the camera at the sender's code",
-  "receive.settings": "Settings",
+  "receive.stats": "ready to receive light codes",
+  "receive.settings": "Camera settings",
   "receive.capWidth": "capture width",
   "receive.capFps": "capture fps",
   "receive.workers": "decode workers",
+  "receive.camera": "camera",
+  "receive.camAuto": "auto · rear camera",
   "receive.settingsHint":
-    "Set before starting the camera. 1280-wide is the widest mode iOS runs at a true 60 fps; the fps request is demanded with `exact` first because `ideal: 60` silently delivers 30.",
-  "receive.start": "Start camera",
+    "Defaults suit most phones. If decoding is hard, hold the device steady and raise the sender's screen brightness.",
+  "receive.start": "Start receiving",
   "receive.secure":
     "✗ camera needs a secure context — this page must be served over https to use the camera from another device.",
   "receive.camErr": "✗ camera: {msg}",
-  "receive.searching": "camera {w}×{h}@{fps} — searching for a stream…",
+  "receive.camDenied": "✗ camera permission denied — allow it in your browser settings and retry",
+  "receive.searching": "searching for a light-code stream…",
   "receive.done": "Transfer Complete!",
   "receive.summary":
     "{name} · {kb} KB in {sec}s · {rate} KB/s · hash {ok}",
   "receive.hashOk": "verified ✓",
   "receive.hashBad": "MISMATCH ✗",
-  "receive.save": "save",
-  "receive.share": "share",
-  "receive.forward": "send onward",
+  "receive.save": "Save file",
+  "receive.share": "Share",
+  "receive.forward": "Send onward",
   "receive.noname": "received",
+  "receive.rxTitle": "Light-Code Receiver",
+  "receive.rxSubtitle": "No upload. Point the camera at the animated QR code on the sender.",
+  "receive.capSecure": "Secure context",
+  "receive.capCamera": "Camera",
+  "receive.capCheck": "checking",
+  "receive.capPending": "pending",
+  "receive.capPendingCam": "pending permission",
+  "receive.capPass": "ok",
+  "receive.capFail": "failed",
+  "receive.receiving": "Receiving",
+  "receive.framesSuffix": "frames",
 
   "m.cap": "capture fps",
   "m.dec": "decode fps",
-  "m.rate": "goodput",
+  "m.rate": "throughput",
   "m.time": "elapsed",
   "m.frames": "frames new/dup",
-  "m.k": "blocks K",
-  "m.block": "block len",
+  "m.k": "source blocks",
+  "m.block": "block size",
   "m.payload": "payload",
 };
 
@@ -101,35 +115,49 @@ const zh: Dict = {
   "send.genErr": "✗ {msg}",
   "send.progress": "已发送 {n} 帧 · 接收端任意收集 ~{m} 帧即可",
 
-  "receive.stats": "把摄像头对准发送端的二维码",
-  "receive.settings": "设置",
+  "receive.stats": "准备接收光码",
+  "receive.settings": "摄像头设置",
   "receive.capWidth": "采集宽度",
   "receive.capFps": "采集帧率",
-  "receive.workers": "解码线程数",
+  "receive.workers": "解码线程",
+  "receive.camera": "摄像头",
+  "receive.camAuto": "自动选择后置摄像头",
   "receive.settingsHint":
-    "请在开启摄像头前设置。1280 宽是 iOS 真正跑到 60 fps 的最宽档位；帧率先用 `exact` 强求（`ideal: 60` 会被 iOS 悄悄降成 30）。",
-  "receive.start": "开启摄像头",
+    "默认设置适合大多数手机。若识别困难，请保持设备稳定并调高发送端亮度。",
+  "receive.start": "开启摄像头接收",
   "receive.secure":
     "✗ 摄像头需要安全上下文——必须通过 https 访问本页面才能从其他设备调用摄像头。",
   "receive.camErr": "✗ 摄像头：{msg}",
-  "receive.searching": "摄像头 {w}×{h}@{fps} — 正在搜索数据流…",
+  "receive.camDenied": "✗ 摄像头权限被拒绝，请在浏览器设置中允许后重试",
+  "receive.searching": "正在搜索光码…",
   "receive.done": "传输完成！",
   "receive.summary": "{name} · {kb} KB · 用时 {sec} 秒 · {rate} KB/s · 哈希{ok}",
   "receive.hashOk": "校验通过 ✓",
   "receive.hashBad": "不一致 ✗",
-  "receive.save": "保存",
+  "receive.save": "保存文件",
   "receive.share": "分享",
-  "receive.forward": "转发",
+  "receive.forward": "转发给另一台设备",
   "receive.noname": "收到的文件",
+  "receive.rxTitle": "光码接收器",
+  "receive.rxSubtitle": "无需上传。让摄像头对准发送设备上的动态二维码。",
+  "receive.capSecure": "安全环境",
+  "receive.capCamera": "摄像头",
+  "receive.capCheck": "检测中",
+  "receive.capPending": "待启动",
+  "receive.capPendingCam": "待授权",
+  "receive.capPass": "通过",
+  "receive.capFail": "失败",
+  "receive.receiving": "正在接收",
+  "receive.framesSuffix": "帧",
 
   "m.cap": "采集帧率",
   "m.dec": "解码帧率",
-  "m.rate": "吞吐",
-  "m.time": "耗时",
-  "m.frames": "帧 新/重",
-  "m.k": "块数 K",
-  "m.block": "块大小",
-  "m.payload": "文件大小",
+  "m.rate": "接收速度",
+  "m.time": "已用时间",
+  "m.frames": "新帧/重复",
+  "m.k": "源数据块",
+  "m.block": "单块大小",
+  "m.payload": "文件数据",
 };
 
 export type I18nKey = keyof typeof en;
@@ -164,8 +192,9 @@ function applyStatic() {
     if (key && el.textContent !== t(key)) el.textContent = t(key);
   }
   document.title = lang === "zh" ? "光传输 — 喷泉码二维码文件传输" : "Optical Transfer — fountain QR file transfer";
-  const btn = document.getElementById("lang-btn");
-  if (btn) btn.textContent = t("lang.toggle");
+  for (const btn of document.querySelectorAll(".js-lang-btn")) {
+    btn.textContent = t("lang.toggle");
+  }
 }
 
 /** Register an element wired via data-i18n (idempotent). */
@@ -188,6 +217,7 @@ export function initI18n() {
   document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
   bindStatic();
   applyStatic();
-  const btn = document.getElementById("lang-btn");
-  btn?.addEventListener("click", () => setLang(lang === "en" ? "zh" : "en"));
+  for (const btn of document.querySelectorAll(".js-lang-btn")) {
+    btn.addEventListener("click", () => setLang(lang === "en" ? "zh" : "en"));
+  }
 }
