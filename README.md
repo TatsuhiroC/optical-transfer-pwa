@@ -9,6 +9,9 @@ network path between the devices, no pairing, no server.**
 QR 码流，另一台用摄像头对准屏幕，即可还原文件。**两台设备之间没有任何
 网络路径，无需配对，无需服务器。**
 
+**This repo's live instance / 本仓库线上实例:**
+<https://tatsuhiroc.github.io/optical-transfer-pwa/>
+
 This is a PWA fork of
 [decimen-optical-transfer](https://github.com/bashalarmistalt/decimen-optical-transfer)
 (MIT) that merges the original separate `send`/`receive` pages into **one
