@@ -6,8 +6,9 @@
 // the fountain layer already turns corruption into erasures. On top of the
 // original this mode adds local file selection (any file, photo album, or
 // drag & drop), a file name field in every frame, size checks against the
-// protocol ceiling (k is u16 -> ~65535 blocks), and a live frame/time
-// estimate.
+// protocol ceiling (k is u16 -> ~65535 blocks), a live frame/time estimate,
+// and a "remove file" (×) control so the picker stays visible and the user
+// can clear the selection and choose again. Exactly one file at a time.
 
 import QRCode from "qrcode";
 import { LTEncoder } from "../shared/fountain";
@@ -21,6 +22,7 @@ import {
 } from "../shared/protocol";
 import { store, type PendingFile } from "./store";
 import { guessMime } from "./util";
+import { t } from "./i18n";
 
 const OVERHEAD_EST = 1.18; // expected frames ≈ K × this (robust-soliton ε)
 const MARGIN = 4; // quiet-zone modules
@@ -33,6 +35,8 @@ const dropzone = $("dropzone");
 const fileInput = $("file-input") as HTMLInputElement;
 const photoInput = $("photo-input") as HTMLInputElement;
 const fileMeta = $("file-meta");
+const fileMetaText = $("file-meta-text");
+const fileClear = $("file-clear") as HTMLButtonElement;
 const stage = $("stage");
 const txActions = $("tx-actions");
 const btnStop = $("btn-stop") as HTMLButtonElement;
@@ -48,7 +52,7 @@ export function blockLenFor(frameBytes: number): number {
   return frameBytes - HEADER_LEN - 1 - NAME_FIELD_LEN;
 }
 
-let generation = 0; // bumped on stop/exit; stale loops and timers die
+let generation = 0; // bumped on stop/exit/clear; stale loops and timers die
 let pickSeq = 0; // guards against an older file resolve overwriting a newer pick
 let active = false;
 let progressTimer: number | undefined;
@@ -56,7 +60,7 @@ let progressTimer: number | undefined;
 function loadFile(file: File) {
   const pick = ++pickSeq;
   void file.arrayBuffer().then((buf) => {
-    if (pick !== pickSeq) return; // superseded by a newer pick
+    if (pick !== pickSeq) return; // superseded by a newer pick or a clear
     const payload = new Uint8Array(buf);
     store.pending = { payload, name: file.name, mime: file.type || guessMime(file.name) };
     showFileMeta();
@@ -69,17 +73,27 @@ function showFileMeta() {
   if (!p) return;
   const kb = Math.max(1, Math.round(p.payload.length / 1024));
   fileMeta.hidden = false;
-  fileMeta.textContent = `${p.name} · ${kb} KB · ${p.mime}`;
+  fileClear.hidden = false;
+  fileMetaText.textContent = `${p.name} · ${kb} KB · ${p.mime}`;
+}
+
+function clearSelection() {
+  generation++;
+  pickSeq++; // any in-flight file read is now stale
+  active = false;
+  store.pending = null;
+  fileMeta.hidden = true;
+  stage.hidden = true;
+  txActions.hidden = true;
+  txProgress.hidden = true;
+  txProgress.textContent = "";
+  specs.textContent = t("send.choose");
+  clearInterval(progressTimer);
 }
 
 function sizeError(p: PendingFile, blockLen: number, k: number): string | null {
-  if (p.payload.length > 0xffffffff) return "✗ file too large (protocol ceiling 4 GiB)";
-  if (k > 0xffff) {
-    return (
-      `✗ ${p.name} needs ${k} blocks but the protocol caps at 65535 — ` +
-      `raise bytes/frame or pick a smaller file`
-    );
-  }
+  if (p.payload.length > 0xffffffff) return t("send.tooLarge");
+  if (k > 0xffff) return t("send.tooManyBlocks", { name: p.name, k });
   return null;
 }
 
@@ -87,7 +101,7 @@ async function startStream() {
   const gen = ++generation;
   const p = store.pending;
   if (!p) {
-    specs.textContent = "choose a file to transmit";
+    specs.textContent = t("send.choose");
     return;
   }
   const payload = p.payload;
@@ -180,7 +194,7 @@ async function startStream() {
     try {
       while (queue.length < LOOKAHEAD) queue.push(makeFrame());
     } catch (err) {
-      specs.textContent = `✗ ${err instanceof Error ? err.message : String(err)}`;
+      specs.textContent = t("send.genErr", { msg: err instanceof Error ? err.message : String(err) });
       return;
     }
     setTimeout(pump, 0);
@@ -191,11 +205,10 @@ async function startStream() {
   progressTimer = window.setInterval(() => {
     if (gen !== generation) {
       clearInterval(progressTimer);
-      progressTimer = undefined;
       return;
     }
     const est = Math.ceil(k * OVERHEAD_EST);
-    txProgress.textContent = `frames sent: ${nextSeq} · receiver needs ~${est} of any`;
+    txProgress.textContent = t("send.progress", { n: nextSeq, m: est });
   }, 500);
 
   const interval = 1000 / txFps;
@@ -230,7 +243,7 @@ function stopStream() {
   active = false;
   btnStop.hidden = true;
   btnResend.hidden = false;
-  txProgress.textContent = "stream stopped";
+  txProgress.textContent = t("send.stopped");
 }
 
 export function enterSend() {
@@ -250,6 +263,7 @@ btnStop.onclick = stopStream;
 btnResend.onclick = () => {
   if (store.pending) void startStream();
 };
+fileClear.onclick = clearSelection;
 
 fileInput.onchange = () => {
   const f = fileInput.files?.[0];

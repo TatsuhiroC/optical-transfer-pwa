@@ -45,6 +45,14 @@ instead of the two bundled test images.
   HTTPS host (camera needs a secure context).
   **PWA**：可安装、首次访问后完全离线、可部署到任意静态 HTTPS 托管
   （摄像头 API 要求安全上下文）。
+- **Bilingual UI** — 中文 / English switch in the top bar, persisted.
+  **双语界面**：顶栏一键切换中 / 英文，选择会记住。
+- **File type safety net** — the receiver sniffs magic bytes, so even a
+  stream without a name (legacy frames) saves with the right extension: a
+  WAV that arrives as "received" lands as `received.wav`, never extensionless.
+  **文件类型兜底**：接收端会嗅探文件魔数，即使数据流没有文件名（旧版
+  帧）也能带上正确扩展名——比如 WAV 传过来显示为 `received.wav`，绝不会
+  变成无后缀文件。
 
 Scan settings are unchanged from the original: capture width / fps / decode
 worker count, `exact` fps demanded first (iOS lies with `ideal`), progress

@@ -223,3 +223,137 @@ button.ghost {
 #tx-progress {
   color: #ffb257;
 }
+
+/* ---- single-page PWA additions (same palette as above) ---- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+nav.mode {
+  display: flex;
+  gap: 18px;
+}
+nav.mode a {
+  color: #9a8f76;
+  text-transform: uppercase;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  padding-bottom: 3px;
+  border-bottom: 2px solid transparent;
+}
+nav.mode a.active {
+  color: #ede5d4;
+  border-bottom-color: #ffb257;
+}
+.role-buttons {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+}
+button.small {
+  padding: 10px 20px;
+  font-size: 14px;
+}
+button.ghost {
+  background: transparent;
+  color: #ffb257;
+  border: 1px solid #2e2718;
+}
+.dropzone {
+  width: min(92vw, 640px);
+  border: 2px dashed #2e2718;
+  border-radius: 10px;
+  padding: 26px 18px;
+  background: #1b1712;
+  color: #9a8f76;
+  font-size: 14px;
+  text-align: center;
+}
+.dropzone .dz-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+.dropzone.drag {
+  border-color: #ffb257;
+  color: #ffb257;
+}
+.file-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #ede5d4;
+  font-size: 13px;
+  text-align: center;
+}
+.clear-btn {
+  font: inherit;
+  color: #ffb257;
+  background: transparent;
+  border: 1px solid #2e2718;
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  line-height: 1;
+  font-size: 15px;
+  cursor: pointer;
+}
+.clear-btn:hover {
+  border-color: #ffb257;
+}
+#tx-progress {
+  color: #ffb257;
+}
+
+/* receive: control panel groups settings + start, camera stays small, and
+   the speed metrics sit right under the progress bar (controls + progress
+   belong together, not scattered). */
+.rx-panel {
+  width: min(92vw, 480px);
+  background: #1b1712;
+  border: 1px solid #2e2718;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.rx-panel details.settings {
+  width: 100%;
+}
+.rx-panel #start {
+  width: 100%;
+}
+.preview {
+  width: min(72vw, 280px);
+}
+.preview video {
+  border-radius: 10px;
+}
+.progress {
+  width: min(72vw, 280px);
+}
+.speed-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: min(72vw, 280px);
+}
+.speed-row .metric {
+  text-align: center;
+}

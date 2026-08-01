@@ -4,19 +4,22 @@
 // fps / worker count, `exact` fps demanded first (iOS lies with `ideal`),
 // requestVideoFrameCallback with a generation counter against zombie capture
 // loops, progress tracking frames COLLECTED (LT peeling back-loads).
-// New: the frame name field shows up as the received file name, and the
-// result offers save / share / send-onward instead of a hardcoded PNG view.
+// New: the frame name field shows up as the received file name, the result
+// offers save / share / send-onward, and the file name/type are verified
+// against magic bytes so a stream without a name (legacy frames) still lands
+// with the right extension (e.g. a WAV stays a .wav).
 
 import { LTDecoder } from "../shared/fountain";
 import { fnv1a, parseFrame } from "../shared/protocol";
 import { store } from "./store";
-import { guessMime } from "./util";
+import { guessMime, sniffMime, hasExtension, extForMime } from "./util";
+import { t } from "./i18n";
 
 const OVERHEAD_EST = 1.18; // expected frames ≈ K × this (robust-soliton ε)
 
 const startBtn = document.getElementById("start") as HTMLButtonElement;
 const video = document.getElementById("video") as HTMLVideoElement;
-const preview = document.getElementById("preview")!;
+const rxStage = document.getElementById("rx-stage")!;
 const stats = document.getElementById("stats")!;
 const progressEl = document.getElementById("progress")!;
 const bar = document.getElementById("bar")!;
@@ -44,9 +47,7 @@ async function start() {
   if (!navigator.mediaDevices?.getUserMedia) {
     // On insecure origins the API doesn't exist AT ALL — this is the plain-
     // http-over-LAN case. localhost is exempt; other hosts need https.
-    stats.textContent =
-      "✗ camera needs a secure context — this page must be served over " +
-      "https to use the camera from another device.";
+    stats.textContent = t("receive.secure");
     return;
   }
   const captureWidth = Number((document.getElementById("cfg-width") as HTMLSelectElement).value);
@@ -54,7 +55,8 @@ async function start() {
   const workerCount = Number((document.getElementById("cfg-workers") as HTMLSelectElement).value);
   settings.style.display = "none";
   startBtn.style.display = "none";
-  preview.style.display = "block";
+  rxStage.style.display = "block";
+  progressEl.style.display = "block";
   metricsEl.style.display = "grid";
   const base: MediaTrackConstraints = {
     facingMode: "environment",
@@ -74,12 +76,16 @@ async function start() {
       });
     }
   } catch (err) {
-    stats.textContent = `✗ camera: ${err instanceof Error ? err.message : String(err)}`;
+    stats.textContent = t("receive.camErr", { msg: err instanceof Error ? err.message : String(err) });
     return;
   }
   video.srcObject = stream;
   await video.play().catch(() => undefined);
-  stats.textContent = `camera ${stream.getVideoTracks()[0]?.getSettings().width}×${stream.getVideoTracks()[0]?.getSettings().height}@${stream.getVideoTracks()[0]?.getSettings().frameRate} — searching for a stream…`;
+  stats.textContent = t("receive.searching", {
+    w: stream.getVideoTracks()[0]?.getSettings().width ?? "?",
+    h: stream.getVideoTracks()[0]?.getSettings().height ?? "?",
+    fps: stream.getVideoTracks()[0]?.getSettings().frameRate ?? "?",
+  });
 
   for (let i = 0; i < workerCount; i++) {
     const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
@@ -152,7 +158,6 @@ function onDecoded(bytes: Uint8Array) {
     decoder = new LTDecoder(header.k, header.blockLen, header.sessionId, header.totalLen);
     sessionId = header.sessionId;
     startTs = performance.now();
-    progressEl.style.display = "block";
   }
   decoder.addFrame(header.seq, block);
   const progress = Math.min(0.99, decoder.framesNew / (decoder.k * OVERHEAD_EST));
@@ -166,20 +171,39 @@ function onDecoded(bytes: Uint8Array) {
   }
 }
 
+/**
+ * Name + type hardening: the protocol only carries a name, so the payload's
+ * magic bytes are the source of truth for the MIME type, and the saved file
+ * name always ends in a real extension — a WAV that arrives as "received"
+ * (or legacy frames with no name at all) still saves as .wav.
+ */
+function resolveFileMeta(payload: Uint8Array, name: string): { fileName: string; mime: string } {
+  const sniffed = sniffMime(payload);
+  const raw = name || t("receive.noname");
+  const mime = sniffed ?? guessMime(raw);
+  if (hasExtension(raw)) return { fileName: raw, mime };
+  return { fileName: `${raw}.${extForMime(sniffed)}`, mime };
+}
+
 function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen: number, name: string) {
   done = true;
   captureGen++;
   stream?.getTracks().forEach((t) => t.stop());
-  preview.style.display = "none";
+  rxStage.style.display = "none";
   bar.style.width = "100%";
-  const fileName = name || "received.bin";
-  const mime = guessMime(fileName);
+  const { fileName, mime } = resolveFileMeta(payload, name);
   const kb = Math.round(totalLen / 1024);
   const rate = (totalLen / 1024 / seconds).toFixed(1);
-  stats.textContent = `${fileName} · ${kb} KB in ${seconds.toFixed(1)} s · ${rate} KB/s · hash ${hashOk ? "verified ✓" : "MISMATCH ✗"}`;
+  stats.textContent = t("receive.summary", {
+    name: fileName,
+    kb,
+    sec: seconds.toFixed(1),
+    rate,
+    ok: hashOk ? t("receive.hashOk") : t("receive.hashBad"),
+  });
   const heading = document.createElement("div");
   heading.className = "done";
-  heading.textContent = "Transfer Complete!";
+  heading.textContent = t("receive.done");
   result.append(heading);
 
   const isImage = mime.startsWith("image/");
@@ -194,7 +218,7 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
   actions.className = "actions";
   const dl = document.createElement("button");
   dl.className = "small";
-  dl.textContent = "save";
+  dl.textContent = t("receive.save");
   dl.onclick = () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([payload as BlobPart], { type: mime }));
@@ -207,7 +231,7 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
   if (navigator.share && navigator.canShare?.({ files: [file] })) {
     const share = document.createElement("button");
     share.className = "small";
-    share.textContent = "share";
+    share.textContent = t("receive.share");
     share.onclick = () => {
       void navigator.share({ files: [file] }).catch(() => undefined);
     };
@@ -216,7 +240,7 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
 
   const fwd = document.createElement("button");
   fwd.className = "ghost small";
-  fwd.textContent = "send onward";
+  fwd.textContent = t("receive.forward");
   fwd.onclick = () => {
     store.pending = { payload, name: fileName, mime };
     location.hash = "#/send";
