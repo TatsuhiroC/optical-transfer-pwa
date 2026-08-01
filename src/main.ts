@@ -23,6 +23,9 @@ function show(name: keyof typeof views) {
   if (current === "receive") exitReceive();
   current = name;
   for (const [k, v] of Object.entries(views)) v.hidden = k !== name;
+  // the receiver has its own visual language (qrrec style) — switch the
+  // whole page background/font to match it
+  document.body.classList.toggle("rx-mode", name === "receive");
   navSend.classList.toggle("active", name === "send");
   navReceive.classList.toggle("active", name === "receive");
   if (name === "send") enterSend();
