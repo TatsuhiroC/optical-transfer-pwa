@@ -13,7 +13,10 @@ QR 码流，另一台用摄像头对准屏幕，即可还原文件。**两台设
 
 
 **This repo's live instance / 本仓库线上实例:**
-[**▶ 打开光码互传 / Open Optical Transfer**](https://tatsuhiroc.github.io/optical-transfer-pwa))
+
+[**▶ 打开光码互传 / Open Optical Transfer**](https://tatsuhiroc.github.io/optical-transfer-pwa)
+
+
 
 
 
