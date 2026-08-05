@@ -79,6 +79,9 @@ const en: Dict = {
   "receive.framesSuffix": "frames",
   "receive.restart": "Restart",
 
+  "footer.by": "by",
+  "footer.base": "based on",
+
   "m.cap": "capture fps",
   "m.dec": "decode fps",
   "m.rate": "throughput",
@@ -158,6 +161,9 @@ const zh: Dict = {
   "receive.receiving": "正在接收",
   "receive.framesSuffix": "帧",
   "receive.restart": "重新接收",
+
+  "footer.by": "作者",
+  "footer.base": "基于",
 
   "m.cap": "采集帧率",
   "m.dec": "解码帧率",
