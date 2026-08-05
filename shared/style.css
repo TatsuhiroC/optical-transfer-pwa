@@ -554,3 +554,21 @@ video.received {
     gap: 5px;
   }
 }
+
+/* credit footer */
+.site-footer {
+  margin-top: auto; /* pin to the bottom of the viewport */
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  max-width: 640px;
+  line-height: 1.6;
+}
+.site-footer a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.22);
+}
+.site-footer a:hover {
+  color: var(--accent);
+}
