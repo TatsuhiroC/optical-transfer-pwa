@@ -29,7 +29,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 22px;
-  padding: calc(22px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom));
+  padding: calc(22px + env(safe-area-inset-top)) 18px calc(64px + env(safe-area-inset-bottom));
   color: var(--text);
   background: radial-gradient(circle at 50% -10%, rgba(255, 91, 113, 0.17), transparent 38%),
     var(--bg);
@@ -558,14 +558,19 @@ video.received {
   }
 }
 
-/* credit footer */
+/* credit footer — anchored to the viewport so it can never be moved by
+   content reflow, scroll, or the PWA auto-update reload */
 .site-footer {
-  margin-top: auto; /* pin to the bottom of the viewport */
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
+  left: 0;
+  right: 0;
+  padding: 6px 14px 8px;
   color: var(--muted);
   font-size: 13px;
   text-align: center;
-  max-width: 640px;
   line-height: 1.6;
+  background: linear-gradient(transparent, var(--bg) 70%);
 }
 .site-footer a {
   color: var(--muted);
