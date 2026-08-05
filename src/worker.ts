@@ -22,9 +22,13 @@ ctx.onmessage = async (e: MessageEvent) => {
   const { id, buf, w, h } = e.data as { id: number; buf: ArrayBuffer; w: number; h: number };
   try {
     const img = new ImageData(new Uint8ClampedArray(buf), w, h);
-    const results = await readBarcodes(img, { formats: ["QRCode"], maxNumberOfSymbols: 1 });
-    const r = results.find((x) => x.isValid && x.bytes.length > 0);
-    ctx.postMessage({ id, bytes: r ? r.bytes : null });
+    // Dual-lane senders show two codes per screen refresh; decode both and
+    // hand every one to the main thread (the fountain decoder dedups by
+    // seq, so feeding both lanes into one decoder is safe). Single-code
+    // streams simply yield a one-element list.
+    const results = await readBarcodes(img, { formats: ["QRCode"], maxNumberOfSymbols: 2 });
+    const found = results.filter((x) => x.isValid && x.bytes.length > 0).map((x) => x.bytes);
+    ctx.postMessage({ id, bytes: found });
   } catch {
     ctx.postMessage({ id, bytes: null });
   }

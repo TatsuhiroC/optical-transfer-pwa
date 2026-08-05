@@ -28,6 +28,15 @@ const OVERHEAD_EST = 1.18; // expected frames ≈ K × this (robust-soliton ε)
 const MARGIN = 4; // quiet-zone modules
 const LOOKAHEAD = 3;
 
+// Dual-lane mode ("2 codes"): both QRs show the SAME fountain stream, but
+// with disjoint seq ranges (lane A: 0…, lane B: LANE_OFFSET…). The receiver
+// dedups by seq, so two codes per refresh = two useful frames = 2× speed,
+// and a blocked code just leaves the other lane delivering the full stream
+// (1× speed, never a stall). No protocol change, no alignment needed.
+// 2^31 frames at 60 fps is ~414 days of continuous streaming — far beyond
+// any real transfer, so the ranges can never collide.
+const LANE_OFFSET = 0x80000000;
+
 const $ = (id: string) => document.getElementById(id)!;
 const canvas = $("qr") as HTMLCanvasElement;
 const specs = $("specs");
@@ -46,6 +55,7 @@ const cfgFps = $("cfg-fps") as HTMLSelectElement;
 const cfgBytes = $("cfg-bytes") as HTMLSelectElement;
 const cfgEcc = $("cfg-ecc") as HTMLSelectElement;
 const cfgSize = $("cfg-size") as HTMLInputElement;
+const cfgLanes = $("cfg-lanes") as HTMLSelectElement;
 
 /** Payload bytes per frame after header + name field. */
 export function blockLenFor(frameBytes: number): number {
@@ -111,6 +121,7 @@ async function startStream() {
   const frameBytes = Number(cfgBytes.value);
   const ecc = cfgEcc.value as "L" | "M" | "Q" | "H";
   const displayPx = Number(cfgSize.value);
+  const lanes = cfgLanes.value === "2" ? 2 : 1; // 1 = original single-code mode
   const blockLen = blockLenFor(frameBytes);
   const k = Math.ceil(payload.length / blockLen);
   const tooBig = sizeError(p, blockLen, k);
@@ -141,26 +152,33 @@ async function startStream() {
   let version: number | undefined; // locked after the first frame
   let modules = 0;
   let scale = 1;
+  let stack = true; // portrait: codes stacked vertically; landscape: side by side
   const staging = document.createElement("canvas");
   const queue: ImageData[] = [];
-  let nextSeq = 0;
+  let nextSeq = 0; // lane A seq (0…)
+  let nextSeqB = 0; // lane B seq offset from LANE_OFFSET
 
   const sizeCanvas = () => {
     const dpr = window.devicePixelRatio || 1;
     const total = modules + 2 * MARGIN;
-    const cssBudget = Math.min(0.9 * Math.min(window.innerWidth, window.innerHeight), displayPx);
+    const short = Math.min(window.innerWidth, window.innerHeight);
+    const long = Math.max(window.innerWidth, window.innerHeight);
+    // Dual-lane keeps the SAME per-module size as single-code (identical
+    // decode margin); the long axis is halved so both codes fit on screen.
+    // With lanes = 1 the extra term is a no-op → layout is unchanged.
+    const cssBudget = Math.min(0.9 * short, displayPx, lanes > 1 ? (0.9 * long) / lanes : Infinity);
+    stack = window.innerWidth <= window.innerHeight;
     scale = Math.max(1, Math.floor((cssBudget * dpr) / total));
-    staging.width = total;
-    staging.height = total;
-    canvas.width = total * scale;
-    canvas.height = total * scale;
-    canvas.style.width = `${(total * scale) / dpr}px`;
-    canvas.style.height = `${(total * scale) / dpr}px`;
+    staging.width = stack ? total : total * lanes;
+    staging.height = stack ? total * lanes : total;
+    canvas.width = staging.width * scale;
+    canvas.height = staging.height * scale;
+    canvas.style.width = `${(staging.width * scale) / dpr}px`;
+    canvas.style.height = `${(staging.height * scale) / dpr}px`;
   };
 
-  const makeFrame = (): ImageData => {
-    const bytes = packFrame({ ...header, seq: nextSeq }, encoder.encode(nextSeq), name);
-    nextSeq++;
+  const makeFrame = (seq: number): ImageData => {
+    const bytes = packFrame({ ...header, seq }, encoder.encode(seq), name);
     const qr = QRCode.create([{ data: bytes, mode: "byte" } as unknown as QRCode.QRCodeSegment], {
       errorCorrectionLevel: ecc,
       version,
@@ -173,7 +191,8 @@ async function startStream() {
       const est = Math.ceil(k * OVERHEAD_EST);
       specs.textContent =
         `${p.name} · ${Math.round(payload.length / 1024)} KB · K=${k} · ~${est} frames · ` +
-        `~${Math.ceil(est / txFps)} s @${txFps}fps · ${frameBytes} B/frame · V${version} · ECC ${ecc}`;
+        `~${Math.ceil(est / (txFps * lanes))} s @${txFps}fps×${lanes} · ${frameBytes} B/frame · ` +
+        `V${version} · ECC ${ecc}`;
     }
     const size = qr.modules.size;
     const data = qr.modules.data;
@@ -194,7 +213,10 @@ async function startStream() {
   const pump = () => {
     if (gen !== generation) return;
     try {
-      while (queue.length < LOOKAHEAD) queue.push(makeFrame());
+      while (queue.length < LOOKAHEAD * lanes) {
+        queue.push(makeFrame(nextSeq++));
+        if (lanes === 2) queue.push(makeFrame(LANE_OFFSET + nextSeqB++));
+      }
     } catch (err) {
       specs.textContent = t("send.genErr", { msg: err instanceof Error ? err.message : String(err) });
       return;
@@ -210,7 +232,7 @@ async function startStream() {
       return;
     }
     const est = Math.ceil(k * OVERHEAD_EST);
-    txProgress.textContent = t("send.progress", { n: nextSeq, m: est });
+    txProgress.textContent = t("send.progress", { n: nextSeq + nextSeqB, m: est });
   }, 500);
 
   const interval = 1000 / txFps;
@@ -219,12 +241,16 @@ async function startStream() {
     if (gen !== generation) return;
     requestAnimationFrame(tick);
     if (now < nextAt) return;
-    const img = queue.shift();
-    if (!img) {
+    if (queue.length < lanes) {
       nextAt = now + interval;
       return;
     }
-    staging.getContext("2d")!.putImageData(img, 0, 0);
+    const t = modules + 2 * MARGIN; // per-code pixel size in staging space
+    const sctx = staging.getContext("2d")!;
+    for (let l = 0; l < lanes; l++) {
+      const img = queue.shift()!;
+      sctx.putImageData(img, stack ? 0 : l * t, stack ? l * t : 0);
+    }
     const ctx = canvas.getContext("2d")!;
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(staging, 0, 0, canvas.width, canvas.height);
@@ -292,7 +318,7 @@ dropzone.addEventListener("drop", (e) => {
   if (f) loadFile(f);
 });
 
-for (const el of [cfgFps, cfgBytes, cfgEcc, cfgSize]) {
+for (const el of [cfgFps, cfgBytes, cfgEcc, cfgSize, cfgLanes]) {
   el.addEventListener("change", () => {
     if (active && store.pending) void startStream();
   });

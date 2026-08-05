@@ -28,6 +28,7 @@ const en: Dict = {
   "send.bytes": "bytes / frame",
   "send.ecc": "error correction",
   "send.size": "display size",
+  "send.lanes": "QR codes",
   "send.settingsHint":
     "Changes restart the stream — the receiver resets automatically (new session id in the frame headers; that's the fountain protocol's gift).",
   "send.stop": "stop",
@@ -113,6 +114,7 @@ const zh: Dict = {
   "send.bytes": "每帧字节数",
   "send.ecc": "纠错级别",
   "send.size": "显示尺寸",
+  "send.lanes": "二维码数量",
   "send.settingsHint":
     "修改会重启数据流——接收端会自动重置（帧头带新的 session id，这是喷泉码协议的礼物）。",
   "send.stop": "停止",

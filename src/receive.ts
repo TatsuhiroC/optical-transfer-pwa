@@ -127,13 +127,16 @@ async function start() {
     const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     const slot = i;
     w.onmessage = (e: MessageEvent) => {
-      const { id, bytes } = e.data as { id: number; bytes: Uint8Array | null };
+      const { id, bytes } = e.data as { id: number; bytes: Uint8Array[] };
       if (id === -1) {
         capSet("cap-wasm", "pass", t("receive.capPass"));
         return; // warm-up
       }
       busy[slot] = false;
-      if (bytes) onDecoded(bytes);
+      // Dual-lane senders deliver two codes per camera frame; both belong
+      // to the same fountain stream (disjoint seq ranges), so the decoder
+      // dedups and both count as progress.
+      for (const b of bytes) onDecoded(b);
     };
     workers.push(w);
     busy.push(false);
