@@ -11,6 +11,17 @@
     <link rel="stylesheet" href="./shared/style.css" />
   </head>
   <body>
+    <!-- credit -->
+    <div class="site-credit">
+      <p>
+        <span data-i18n="credit.by">by</span>
+        <a href="https://github.com/TatsuhiroC">TatsuhiroC</a> ·
+        <a href="https://github.com/TatsuhiroC/optical-transfer-pwa">optical-transfer-pwa</a> ·
+        <span data-i18n="credit.base">based on</span>
+        <a href="https://github.com/bashalarmistalt/decimen-optical-transfer">decimen-optical-transfer</a> (MIT)
+      </p>
+    </div>
+
     <header class="topbar">
       <h1>DECIMEN <small>— Fountain QR File Transfer</small></h1>
       <nav class="mode" id="mode">
@@ -194,17 +205,6 @@
       <button type="button" id="restart" class="secondary-button" style="display: none" data-i18n="receive.restart">重新接收</button>
       <div id="result"></div>
     </section>
-
-    <!-- credit -->
-    <footer class="site-footer">
-      <p>
-        <span data-i18n="footer.by">by</span>
-        <a href="https://github.com/TatsuhiroC">TatsuhiroC</a> ·
-        <a href="https://github.com/TatsuhiroC/optical-transfer-pwa">optical-transfer-pwa</a> ·
-        <span data-i18n="footer.base">based on</span>
-        <a href="https://github.com/bashalarmistalt/decimen-optical-transfer">decimen-optical-transfer</a> (MIT)
-      </p>
-    </footer>
 
     <script type="module" src="./src/main.ts"></script>
   </body>
