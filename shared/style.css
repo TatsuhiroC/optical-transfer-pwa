@@ -558,21 +558,19 @@ video.received {
   }
 }
 
-/* credit footer — sits at the bottom of the scrolling page */
-.site-footer {
-  margin-top: auto; /* short content: pinned to the viewport bottom;
-                       long content: flows after it */
+/* credit line — top of the page, in flow, so nothing can move it */
+.site-credit {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   text-align: center;
-  max-width: 640px;
-  line-height: 1.6;
+  line-height: 1.5;
+  opacity: 0.85;
 }
-.site-footer a {
+.site-credit a {
   color: var(--muted);
   text-decoration: underline;
   text-decoration-color: rgba(255, 255, 255, 0.22);
 }
-.site-footer a:hover {
+.site-credit a:hover {
   color: var(--accent);
 }
