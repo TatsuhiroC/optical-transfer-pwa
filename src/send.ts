@@ -15,7 +15,6 @@ import { LTEncoder } from "../shared/fountain";
 import {
   HEADER_LEN,
   NAME_FIELD_LEN,
-  NAME_MAX,
   fnv1a,
   packFrame,
   type FrameHeader,
@@ -72,6 +71,14 @@ function loadFile(file: File) {
   void file.arrayBuffer().then((buf) => {
     if (pick !== pickSeq) return; // superseded by a newer pick or a clear
     const payload = new Uint8Array(buf);
+    if (payload.length === 0) {
+      // totalLen 0 has no valid frame header (parseFrame drops it), so the
+      // receiver would ignore every frame of this stream — say so here instead
+      // of playing a code no one can lock onto.
+      clearSelection();
+      specs.textContent = t("send.empty");
+      return;
+    }
     store.pending = { payload, name: file.name, mime: file.type || guessMime(file.name) };
     showFileMeta();
     void startStream();
@@ -138,7 +145,7 @@ async function startStream() {
   txProgress.hidden = false;
 
   const sessionId = (Math.floor(Math.random() * 0xffff) + 1) & 0xffff;
-  const name = p.name.length > NAME_MAX ? p.name.slice(0, NAME_MAX) : p.name;
+  const name = p.name; // packFrame truncates by bytes, on a code-point boundary
   const encoder = new LTEncoder(payload, blockLen, sessionId);
   const header: FrameHeader = {
     sessionId,

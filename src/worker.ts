@@ -30,11 +30,14 @@ ctx.onmessage = async (e: MessageEvent) => {
     const found = results.filter((x) => x.isValid && x.bytes.length > 0).map((x) => x.bytes);
     ctx.postMessage({ id, bytes: found });
   } catch {
+    // No code in this frame (blur, glare, half a symbol) is the common case —
+    // report it as an empty result, never as a missing message.
     ctx.postMessage({ id, bytes: null });
   }
 };
 
-// warm the WASM so the first real frame doesn't pay instantiation
+// warm the WASM so the first real frame doesn't pay instantiation, and report
+// whether it actually loaded (the capability pill used to be green either way)
 void readBarcodes(new ImageData(8, 8), { formats: ["QRCode"] })
-  .catch(() => undefined)
-  .then(() => ctx.postMessage({ id: -1, bytes: null }));
+  .then(() => ctx.postMessage({ id: -1, ok: true }))
+  .catch(() => ctx.postMessage({ id: -1, ok: false }));

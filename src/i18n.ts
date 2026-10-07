@@ -40,16 +40,17 @@ const en: Dict = {
   "send.tooLarge": "✗ file too large (protocol ceiling 4 GiB)",
   "send.tooManyBlocks":
     "✗ {name} needs {k} blocks but the protocol caps at 65535 — raise bytes/frame or pick a smaller file",
+  "send.empty": "✗ that file is empty — there is nothing to transmit",
   "send.genErr": "✗ {msg}",
   "send.progress": "frames sent: {n} · receiver needs ~{m} of any",
 
   "receive.stats": "ready to receive light codes",
+  "receive.badStream":
+    "✗ ignoring an invalid light-code stream — its frame header does not describe a real file",
   "receive.settings": "Camera settings",
   "receive.capWidth": "capture width",
   "receive.capFps": "capture fps",
   "receive.workers": "decode workers",
-  "receive.camera": "camera",
-  "receive.camAuto": "auto · rear camera",
   "receive.settingsHint":
     "Defaults suit most phones. If decoding is hard, hold the device steady and raise the sender's screen brightness.",
   "receive.start": "Start receiving",
@@ -125,16 +126,16 @@ const zh: Dict = {
   "send.tooLarge": "✗ 文件过大（协议上限 4 GiB）",
   "send.tooManyBlocks":
     "✗ {name} 需要 {k} 个块，但协议上限是 65535——调大每帧字节数，或换个更小的文件",
+  "send.empty": "✗ 该文件为空，没有可发送的内容",
   "send.genErr": "✗ {msg}",
   "send.progress": "已发送 {n} 帧 · 接收端任意收集 ~{m} 帧即可",
 
   "receive.stats": "准备接收光码",
+  "receive.badStream": "✗ 已忽略非法的光码流——帧头描述的不是一个合法文件",
   "receive.settings": "摄像头设置",
   "receive.capWidth": "采集宽度",
   "receive.capFps": "采集帧率",
   "receive.workers": "解码线程",
-  "receive.camera": "摄像头",
-  "receive.camAuto": "自动选择后置摄像头",
   "receive.settingsHint":
     "默认设置适合大多数手机。若识别困难，请保持设备稳定并调高发送端亮度。",
   "receive.start": "开启摄像头接收",

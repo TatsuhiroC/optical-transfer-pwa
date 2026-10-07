@@ -66,6 +66,14 @@ QR 码流，另一台用摄像头对准屏幕，即可还原文件。**两台设
   帧）也能带上正确扩展名——比如 WAV 传过来显示为 `received.wav`，绝不会
   变成无后缀文件。
 
+- **Crafted streams are refused** — every frame carries its own header, so the
+  receiver validates it against what a real sender can emit (block count,
+  bytes per frame, declared length) before allocating anything for it: a
+  hand-made code claiming a 4 GiB file is dropped, never hashed.
+  **拒绝伪造流**：每帧都自带帧头，接收端会在分配内存之前先校验它是否是真实
+  发送端可能产生的值（块数、每帧字节数、声明长度）——手工构造、声称 4 GiB
+  的码会被直接丢弃，而不是被哈希。
+
 Scan settings are unchanged from the original: capture width / fps / decode
 worker count, `exact` fps demanded first (iOS lies with `ideal`), progress
 tracked by frames collected (LT peeling back-loads).
@@ -77,8 +85,9 @@ tracked by frames collected (LT peeling back-loads).
 ## Try it / 使用
 
 ```bash
-npm install
+npm install        # Node ^20.19 || >=22.12 (vite 8) / 需要 Node ^20.19 或 >=22.12
 npm run dev        # https://localhost:5173 — pick a role / 选择角色
+npm test           # protocol + LT fountain code unit tests / 协议与喷泉码单测
 ```
 
 - **Send / 发送**: open the app, tap **Send a file**, choose a file (or drag
@@ -100,28 +109,54 @@ Two installed copies of the same PWA (one in each role) work fully offline.
 `k` (block count) is a u16 — max ~65535 blocks. At 1465 B/frame that caps
 files around **90 MB**; at the densest 2953 B/frame setting, ~190 MB. Larger
 selections are rejected with a hint to raise bytes/frame or pick a smaller
-file. `totalLen` is a u32 (4 GiB ceiling).
+file. `totalLen` is a u32 on the wire, but the receiver only accepts what `k`
+blocks can actually hold (`k = ceil(totalLen / blockLen)`), so a 4 GiB
+declaration is dropped instead of allocated.
 
 `k`（分块数）是 u16，最多约 65535 块。按 1465 B/帧计算，文件上限约
 **90 MB**；用最密的 2953 B/帧设置约为 190 MB。超限时会被拒绝，并提示调大
-bytes/frame 或换小文件。`totalLen` 是 u32（4 GiB 上限）。
+bytes/frame 或换小文件。`totalLen` 在协议里是 u32，但接收端只接受 `k` 个块
+真正装得下的长度（`k = ceil(totalLen / blockLen)`），因此声称 4 GiB 的流会
+被直接丢弃，而不是分配出来。
 
 ## Deploy / 部署
 
-Static HTTPS hosting, e.g. GitHub Pages:
+GitHub Pages is published on every push to `main` by
+[deploy-pages.yml](.github/workflows/deploy-pages.yml) — `npm ci`, `npm test`,
+`npm run build`, then `actions/deploy-pages` uploads `dist/`. No build output
+is committed to a deploy branch any more; [ci.yml](.github/workflows/ci.yml)
+runs the same tests on pull requests.
 
-静态 HTTPS 托管即可，例如 GitHub Pages：
+GitHub Pages 由 [deploy-pages.yml](.github/workflows/deploy-pages.yml) 在每次
+推送到 `main` 时发布：`npm ci` → `npm test` → `npm run build`，再由
+`actions/deploy-pages` 上传 `dist/`。构建产物不再提交到发布分支；PR 由
+[ci.yml](.github/workflows/ci.yml) 跑同样的测试。
+
+One-time setup / 一次性设置: **Settings → Pages → Build and deployment →
+Source: GitHub Actions**, or
 
 ```bash
-npm run build      # dist/ is fully self-contained (service worker included)
-npm run icons      # regenerate the QR app icon if you change the brand text
+gh api -X PUT repos/TatsuhiroC/optical-transfer-pwa/pages -f build_type=workflow
 ```
 
-Push `dist/` to the hosting branch and enable HTTPS — that's it. The service
-worker precaches every asset; after the first visit the app runs offline and
-both roles work without a network.
+Until that is done the workflow fails at `configure-pages` and the site keeps
+serving the retired `gh-pages` branch, which can be deleted once the first
+Actions deploy is green:
 
-把 `dist/` 推到托管分支并开启 HTTPS 即可。Service Worker 预缓存了所有
+```bash
+gh api -X DELETE repos/TatsuhiroC/optical-transfer-pwa/git/refs/heads/gh-pages
+```
+
+没做这一步之前 workflow 会在 `configure-pages` 失败，站点继续由已退役的
+`gh-pages` 分支提供；第一次 Actions 部署成功后即可删除该分支（命令同上）。
+
+Any other static HTTPS host works too: `dist/` is fully self-contained (service
+worker included), and `npm run icons` regenerates the QR app icon if you change
+the brand text. The service worker precaches every asset, so after the first
+visit the app runs offline and both roles work without a network.
+
+其他静态 HTTPS 托管同样可用：`dist/` 完全自包含（含 Service Worker）；改了
+品牌文字后用 `npm run icons` 重新生成二维码图标。Service Worker 预缓存了所有
 资源，首次访问后应用离线可用，两种角色都不依赖网络。
 
 **This repo's live instance / 本仓库线上实例:**

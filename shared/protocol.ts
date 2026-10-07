@@ -27,6 +27,13 @@ export const HEADER_LEN = 20;
 export const NAME_FIELD_LEN = 64;
 /** Hard cap on the UTF-8 name that fits in the fixed field. */
 export const NAME_MAX = NAME_FIELD_LEN - 1;
+/**
+ * Largest payload a single frame can carry: the densest form of a frame is a
+ * 2953-byte QR code (V40, ECC L, byte mode), which leaves this much after the
+ * 20-byte header. Physical cap for both the named and the legacy layout, and
+ * the receiver's bound on a per-frame buffer a crafted stream can request.
+ */
+export const MAX_BLOCK_LEN = 2953 - HEADER_LEN;
 const MAGIC0 = 0xd1;
 const MAGIC1 = 0x0c;
 
@@ -39,8 +46,22 @@ export interface FrameHeader {
   payloadFnv: number;
 }
 
+/**
+ * UTF-8 encode a name into at most NAME_MAX bytes, never splitting a code
+ * point: a hard cut at byte 63 can land inside a multi-byte sequence (emoji are
+ * 4 bytes) and the receiver would decode the leftover as U+FFFD — dropping the
+ * extension along with the last character.
+ */
+export function encodeName(name: string): Uint8Array {
+  const enc = new TextEncoder().encode(name);
+  if (enc.length <= NAME_MAX) return enc;
+  let end = NAME_MAX;
+  while (end > 0 && (enc[end]! & 0xc0) === 0x80) end--; // back off continuation bytes
+  return enc.subarray(0, end);
+}
+
 export function packFrame(h: FrameHeader, block: Uint8Array, name?: string): Uint8Array {
-  const enc = name ? new TextEncoder().encode(name).subarray(0, NAME_MAX) : null;
+  const enc = name ? encodeName(name) : null;
   const nameLen = enc ? enc.length : 0;
   const out = new Uint8Array(HEADER_LEN + 1 + NAME_FIELD_LEN + block.length);
   const dv = new DataView(out.buffer);
@@ -85,6 +106,35 @@ export function parseFrame(
     }
   }
   return { header, block: bytes.subarray(bytes.length - header.blockLen), name };
+}
+
+export type HeaderReject = { kind: "invalid"; reason: "zero" | "blockLen" | "capacity" | "sparse" };
+
+/**
+ * Sanity-check a frame header before the receiver trusts it with memory and
+ * time. Every frame is self-describing and arrives over an untrusted optical
+ * channel, so a stream may claim anything at all — and `LTDecoder.assemble()`
+ * allocates `totalLen` bytes, then the receiver hashes them. A crafted frame
+ * with `k = 1` and `totalLen = 0xFFFFFFFF` therefore used to complete after a
+ * SINGLE code and hand the tab a 4 GiB allocation plus a 4 GiB hash walk.
+ *
+ * A real sender satisfies `k = ceil(totalLen / blockLen)`, `blockLen` within one
+ * QR frame and `totalLen` within what `k` blocks can hold, so rejecting the
+ * complement costs nothing and caps the allocation at what the sender must
+ * actually transmit (65535 blocks x MAX_BLOCK_LEN = 192 MB).
+ *
+ * Returns null for every header a legitimate sender can emit.
+ */
+export function headerReject(
+  h: Pick<FrameHeader, "k" | "blockLen" | "totalLen">,
+): HeaderReject | null {
+  if (h.k === 0 || h.blockLen === 0 || h.totalLen === 0) {
+    return { kind: "invalid", reason: "zero" };
+  }
+  if (h.blockLen > MAX_BLOCK_LEN) return { kind: "invalid", reason: "blockLen" };
+  if (h.totalLen > h.k * h.blockLen) return { kind: "invalid", reason: "capacity" };
+  if (h.totalLen <= (h.k - 1) * h.blockLen) return { kind: "invalid", reason: "sparse" };
+  return null;
 }
 
 export function fnv1a(bytes: Uint8Array): number {
