@@ -12,7 +12,9 @@ export default defineConfig({
     basicSsl(),
     VitePWA({
       registerType: "autoUpdate",
-      injectRegister: "auto",
+      // Registration happens in src/main.ts instead of an injected script: the
+      // service worker must stay off inside the Capacitor build (see main.ts).
+      injectRegister: null,
       includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
       manifest: {
         name: "DECIMEN Optical Transfer",
