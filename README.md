@@ -104,6 +104,73 @@ Two installed copies of the same PWA (one in each role) work fully offline.
 
 同一份 PWA 装两台设备（各扮演一个角色），完全离线可用。
 
+## Android APK / 安卓安装包
+
+Download the latest APK from [Releases](https://github.com/TatsuhiroC/optical-transfer-pwa/releases)
+(or `Actions → Build Android APK → Artifacts` for a dev build) and install it —
+the web bundle, WASM and icons are all inside the APK, so the app never needs a
+network. Android will ask for camera permission the first time you start the
+receive role; the send role works without a camera.
+
+从 [Releases](https://github.com/TatsuhiroC/optical-transfer-pwa/releases) 下载最新
+APK（开发版见 `Actions → Build Android APK → Artifacts`）直接安装即可——网页包、
+WASM、图标全部打包在 APK 内，完全不需要联网。首次使用"接收"时会请求摄像头权限；
+"发送"角色没有摄像头也能用。
+
+The APK is a [Capacitor](https://capacitorjs.com) wrapper around `dist/`. The
+Gradle project is **not** committed: [build-apk.yml](.github/workflows/build-apk.yml)
+runs `npx cap add android` on every build, so the Android tree can never drift from
+the web build it wraps. Locally:
+
+APK 是用 [Capacitor](https://capacitorjs.com) 包住 `dist/`。Gradle 工程**不进版本库**：
+[build-apk.yml](.github/workflows/build-apk.yml) 每次构建都重新 `npx cap add android`，
+所以安卓工程不可能和网页构建脱节。本地构建：
+
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # or: /opt/homebrew/opt/openjdk@21
+export ANDROID_HOME=$HOME/android-sdk              # needs platform-tools + platform 36
+npm run android:sync                               # build dist/ and cap sync
+npx cap add android                                # once, then npm run android:apk
+npx @capacitor/assets generate --android --assetPath resources \
+  --iconBackgroundColor '#ffb257' --iconBackgroundColorDark '#ffb257' \
+  --splashBackgroundColor '#121009' --splashBackgroundColorDark '#121009'
+npm run android:apk                                # → android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+### APK signing / APK 签名
+
+APKs are signed with a keystore kept in GitHub Secrets, so each release installs
+**over** the previous one. Add these four secrets under **Settings → Secrets and
+variables → Actions** (or run `bash scripts/make-keystore.sh`, which generates the
+keystore and prints every value):
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | `base64 < release.keystore` on a single line |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore password |
+| `ANDROID_KEY_ALIAS` | key alias |
+| `ANDROID_KEY_PASSWORD` | key password |
+
+Optionally set `ANDROID_CERT_SHA256` to the keystore's SHA-256 fingerprint (colons
+included) and CI will refuse to publish an APK signed with anything else.
+
+Keep the keystore file itself backed up: if it is lost, existing installs can only
+be updated by uninstalling the app first. Without the secrets the workflow still
+runs, but falls back to a **debug** APK — every runner generates a fresh debug key,
+so users have to uninstall before installing the next build.
+
+---
+
+APK 使用保存在 GitHub Secrets 里的 keystore 签名，因此新版本可以直接覆盖安装旧版本。
+在 **Settings → Secrets and variables → Actions** 里添加以下四个 secret（也可以直接
+运行 `bash scripts/make-keystore.sh`，它会生成 keystore 并打印所有需要填的值）：
+表格同上。可选：把 keystore 的 SHA-256 指纹（带冒号）填到 `ANDROID_CERT_SHA256`，
+CI 就会拒绝发布用其他密钥签名的 APK。
+
+请务必备份 keystore 文件本身：一旦丢失，已安装的用户只能先卸载才能升级。没有配置这些
+secret 时 workflow 仍会运行，但会退回到 **debug** APK——每个 runner 都会重新生成一个
+debug 密钥，用户必须先卸载才能安装下一个版本。
+
 ### Protocol ceiling / 协议上限
 
 `k` (block count) is a u16 — max ~65535 blocks. At 1465 B/frame that caps

@@ -15,6 +15,9 @@
 // camera pill flips to fail with the reason, and a permission denial gets its
 // own message. Re-entering the view resets `done` so a second transfer works.
 
+import { Capacitor } from "@capacitor/core";
+import { Directory, Filesystem } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 import { LTDecoder } from "../shared/fountain";
 import { fnv1a, headerReject, parseFrame } from "../shared/protocol";
 import { store } from "./store";
@@ -272,6 +275,52 @@ function resolveFileMeta(payload: Uint8Array, name: string): { fileName: string;
   return { fileName: `${raw}.${extForMime(sniffed)}`, mime };
 }
 
+/** Base64 for the Filesystem bridge, chunked so a large payload cannot blow the argument stack. */
+function payloadToBase64(payload: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < payload.length; i += chunk) {
+    binary += String.fromCharCode(...payload.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Save the payload where the platform can actually keep it. On the web that is a
+ * blob download; inside the Android shell the WebView has no download handler at
+ * all — clicking a download link there just fires a useless navigation to the
+ * blob — so the file goes through the Capacitor Filesystem plugin instead.
+ */
+async function savePayload(
+  payload: Uint8Array,
+  fileName: string,
+  mime = "application/octet-stream",
+): Promise<string> {
+  if (!Capacitor.isNativePlatform()) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([payload as BlobPart], { type: mime }));
+    a.download = fileName;
+    a.click();
+    return fileName;
+  }
+  await Filesystem.writeFile({
+    path: fileName,
+    directory: Directory.Documents,
+    data: payloadToBase64(payload),
+    recursive: true,
+  });
+  const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Documents });
+  return uri.replace(/^file:\/\//, "");
+}
+
+/** Hand the payload to the system share sheet (Android has no navigator.share in a WebView). */
+async function sharePayload(payload: Uint8Array, fileName: string): Promise<void> {
+  const saved = await savePayload(payload, fileName);
+  stats.textContent = t("receive.saved", { path: saved });
+  // Dismissing the sheet rejects as well — the file is saved by now, so ignore it.
+  await Share.share({ title: fileName, files: [saved] }).catch(() => undefined);
+}
+
 function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen: number, name: string) {
   done = true;
   captureGen++;
@@ -306,20 +355,40 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
   dl.className = "download-button";
   dl.textContent = t("receive.save");
   dl.onclick = () => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([payload as BlobPart], { type: mime }));
-    a.download = fileName;
-    a.click();
+    dl.disabled = true;
+    dl.textContent = t("receive.saving");
+    savePayload(payload, fileName, mime)
+      .then((where) => {
+        stats.textContent = t("receive.saved", { path: where });
+      })
+      .catch((err: unknown) => {
+        stats.textContent = t("receive.saveErr", {
+          msg: err instanceof Error ? err.message : String(err),
+        });
+      })
+      .finally(() => {
+        dl.disabled = false;
+        dl.textContent = t("receive.save");
+      });
   };
   result.append(dl);
 
   const file = new File([payload as BlobPart], fileName, { type: mime });
-  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+  const nativeShell = Capacitor.isNativePlatform();
+  if (nativeShell || (navigator.share && navigator.canShare?.({ files: [file] }))) {
     const share = document.createElement("button");
     share.className = "secondary-button";
     share.textContent = t("receive.share");
     share.onclick = () => {
-      void navigator.share({ files: [file] }).catch(() => undefined);
+      if (!nativeShell) {
+        void navigator.share({ files: [file] }).catch(() => undefined);
+        return;
+      }
+      void sharePayload(payload, fileName).catch((err: unknown) => {
+        stats.textContent = t("receive.saveErr", {
+          msg: err instanceof Error ? err.message : String(err),
+        });
+      });
     };
     result.append(share);
   }

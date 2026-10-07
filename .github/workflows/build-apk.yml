@@ -1,0 +1,127 @@
+name: Build Android APK
+
+# The Capacitor project is generated here rather than committed: capacitor.config.json
+# and resources/ are the only Android sources in git, so the Gradle tree can never drift
+# from the web build it wraps. Signed with the ANDROID_* secrets when they exist (so
+# consecutive APKs install over each other), otherwise a debug APK is produced.
+#
+# Artifacts: Actions -> Artifacts for every run; tagged builds also get a Release.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build web bundle (dist/)
+        run: npm run build
+
+      - name: Generate Android project
+        run: npx cap add android
+
+      # Replaces the Capacitor template icons and splash with the QR branding.
+      # Sources live in resources/ (the tool defaults to assets/, which is unrelated here).
+      - name: Generate app icons and splash screen
+        run: >-
+          npx @capacitor/assets generate --android --assetPath resources
+          --iconBackgroundColor '#ffb257' --iconBackgroundColorDark '#ffb257'
+          --splashBackgroundColor '#121009' --splashBackgroundColorDark '#121009'
+
+      # Installs the release keystore, stamps versionCode/versionName and declares the
+      # camera permission. Falls back to a debug build, with a warning, when the signing
+      # secrets are not configured.
+      - name: Configure signing, version and permissions
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: node scripts/prepare-android.mjs
+
+      - name: Sync web assets into the Android project
+        run: npx cap sync android
+
+      - name: Build APK
+        run: |
+          set -euo pipefail
+          cd android
+          case "${{ steps.signing.outputs.mode }}" in
+            release) ./gradlew assembleRelease ;;
+            *)       ./gradlew assembleDebug ;;
+          esac
+
+      # A release APK that silently ends up unsigned would break every future upgrade,
+      # so fail loudly here instead of shipping it.
+      - name: Verify APK signature
+        run: |
+          set -euo pipefail
+          APK="${{ steps.signing.outputs.apk_path }}"
+          if [ ! -f "$APK" ]; then
+            echo "::error::$APK was not produced (an unsigned build lands in app-release-unsigned.apk — the signing config did not apply)"
+            ls -R android/app/build/outputs/apk || true
+            exit 1
+          fi
+          BUILD_TOOLS="$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/* | sort -V | tail -1)"
+          "$BUILD_TOOLS/apksigner" verify --print-certs "$APK" | tee apk-certs.txt
+          if [ "${{ steps.signing.outputs.mode }}" = "release" ]; then
+            if grep -q "^Signer #1 certificate DN: CN=Android Debug" apk-certs.txt; then
+              echo "::error::release APK is signed with a debug key — the signing config was not applied"
+              exit 1
+            fi
+          fi
+          if [ -n "${{ secrets.ANDROID_CERT_SHA256 }}" ]; then
+            # apksigner prints the digest without separators, so normalise whatever format
+            # the secret uses (the docs suggest colons) before comparing.
+            EXPECTED="$(printf '%s' "${{ secrets.ANDROID_CERT_SHA256 }}" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            grep -qi "$EXPECTED" apk-certs.txt ||
+              { echo "::error::APK certificate does not match ANDROID_CERT_SHA256"; exit 1; }
+          fi
+          echo "camera permission in APK:"
+          "$BUILD_TOOLS/aapt2" dump permissions "$APK" | grep -i camera || echo "  (none — receive role will not work)"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: optical-transfer-${{ steps.signing.outputs.mode }}-apk
+          path: ${{ steps.signing.outputs.apk_path }}
+
+      - name: Attach APK to GitHub Release (tagged builds)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK: ${{ steps.signing.outputs.apk_path }}
+          VERSION: ${{ steps.signing.outputs.version_name }}
+        run: |
+          ASSET="optical-transfer-${VERSION:-$GITHUB_REF_NAME}.apk"
+          cp "$APK" "$ASSET"
+          gh release create "$GITHUB_REF_NAME" "$ASSET" \
+            --title "$GITHUB_REF_NAME" --generate-notes \
+            || gh release upload "$GITHUB_REF_NAME" "$ASSET" --clobber
