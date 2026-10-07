@@ -1,0 +1,35 @@
+name: CI
+
+# Pull requests only: main is covered by deploy-pages.yml, which runs the same
+# test and build steps before publishing. This exists so dependency bumps from
+# Dependabot cannot land untested.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Type-check and build (tsc && vite build)
+        run: npm run build

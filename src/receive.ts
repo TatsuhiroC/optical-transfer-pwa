@@ -16,7 +16,7 @@
 // own message. Re-entering the view resets `done` so a second transfer works.
 
 import { LTDecoder } from "../shared/fountain";
-import { fnv1a, parseFrame } from "../shared/protocol";
+import { fnv1a, headerReject, parseFrame } from "../shared/protocol";
 import { store } from "./store";
 import { guessMime, sniffMime, hasExtension, extForMime } from "./util";
 import { t } from "./i18n";
@@ -127,16 +127,22 @@ async function start() {
     const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     const slot = i;
     w.onmessage = (e: MessageEvent) => {
-      const { id, bytes } = e.data as { id: number; bytes: Uint8Array[] };
+      const { id, bytes, ok } = e.data as {
+        id: number;
+        bytes?: Uint8Array[] | null;
+        ok?: boolean;
+      };
       if (id === -1) {
-        capSet("cap-wasm", "pass", t("receive.capPass"));
-        return; // warm-up
+        // Warm-up: the worker only reports success once the WASM module is up.
+        capSet("cap-wasm", ok ? "pass" : "fail", ok ? t("receive.capPass") : t("receive.capFail"));
+        return;
       }
       busy[slot] = false;
       // Dual-lane senders deliver two codes per camera frame; both belong
       // to the same fountain stream (disjoint seq ranges), so the decoder
-      // dedups and both count as progress.
-      for (const b of bytes) onDecoded(b);
+      // dedups and both count as progress. A frame that failed to decode (or
+      // held no code) arrives as null — normal, just skip it.
+      for (const b of bytes ?? []) onDecoded(b);
     };
     workers.push(w);
     busy.push(false);
@@ -208,6 +214,15 @@ function onDecoded(bytes: Uint8Array) {
   const parsed = parseFrame(bytes);
   if (!parsed || done) return;
   const { header, block } = parsed;
+  const reject = headerReject(header);
+  if (reject) {
+    // Trustworthy streams never land here (see headerReject). Say it once so a
+    // user pointing at a crafted or corrupt sender is not left guessing.
+    if (stats.textContent !== t("receive.badStream")) {
+      stats.textContent = t("receive.badStream");
+    }
+    return;
+  }
   if (!decoder || sessionId !== header.sessionId) {
     decoder = new LTDecoder(header.k, header.blockLen, header.sessionId, header.totalLen);
     sessionId = header.sessionId;
@@ -235,10 +250,23 @@ function onDecoded(bytes: Uint8Array) {
  * magic bytes are the source of truth for the MIME type, and the saved file
  * name always ends in a real extension — a WAV that arrives as "received"
  * (or legacy frames with no name at all) still saves as .wav.
+ *
+ * The name itself is untrusted (anyone with a screen can transmit): strip path
+ * separators, control bytes and bidi overrides, which can make the displayed
+ * name read differently from the saved one, before it reaches the download
+ * attribute, the share sheet or the "send onward" relay.
  */
+function safeName(raw: string): string {
+  const cleaned = raw
+    .replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069/\\]/g, "_")
+    .slice(0, 120)
+    .trim();
+  return /^[.\s]*$/.test(cleaned) ? t("receive.noname") : cleaned;
+}
+
 function resolveFileMeta(payload: Uint8Array, name: string): { fileName: string; mime: string } {
   const sniffed = sniffMime(payload);
-  const raw = name || t("receive.noname");
+  const raw = safeName(name);
   const mime = sniffed ?? guessMime(raw);
   if (hasExtension(raw)) return { fileName: raw, mime };
   return { fileName: `${raw}.${extForMime(sniffed)}`, mime };
