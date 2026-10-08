@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="send" x1="144" y1="144" x2="368" y2="368" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff6e85"/><stop offset="1" stop-color="#ffac81"/>
+    </linearGradient>
+    <linearGradient id="receive" x1="276" y1="358" x2="364" y2="286" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff9c84"/><stop offset="1" stop-color="#ffe1b7"/>
+    </linearGradient>
+    <g id="finder">
+      <path fill-rule="evenodd" d="M164 144H208Q228 144 228 164V208Q228 228 208 228H164Q144 228 144 208V164Q144 144 164 144ZM160 156Q156 156 156 160V212Q156 216 160 216H212Q216 216 216 212V160Q216 156 212 156Z"/>
+      <rect x="170" y="170" width="32" height="32" rx="5"/>
+    </g>
+  </defs>
+  <g fill="url(#send)">
+    <use href="#finder"/><use href="#finder" x="140"/><use href="#finder" y="140"/>
+    <rect x="248" y="148" width="16" height="16" rx="3"/>
+    <rect x="248" y="180" width="16" height="32" rx="3"/>
+    <rect x="248" y="228" width="16" height="16" rx="3"/>
+    <rect x="148" y="248" width="16" height="16" rx="3"/>
+    <rect x="180" y="248" width="32" height="16" rx="3"/>
+    <rect x="228" y="248" width="16" height="16" rx="3"/>
+    <rect x="284" y="244" width="16" height="16" rx="3"/>
+    <rect x="316" y="244" width="32" height="16" rx="3"/>
+    <rect x="244" y="284" width="16" height="16" rx="3"/>
+    <rect x="244" y="316" width="16" height="32" rx="3"/>
+  </g>
+  <rect x="248" y="252" width="16" height="16" rx="3" fill="#fff5e9"/>
+  <g stroke="url(#receive)" fill="url(#receive)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M286 298H346" stroke-width="13"/>
+    <path d="M340 285L362 298L340 311Z" stroke-width="5"/>
+    <path d="M352 345H292" stroke-width="13"/>
+    <path d="M298 332L276 345L298 358Z" stroke-width="5"/>
+  </g>
+</svg>

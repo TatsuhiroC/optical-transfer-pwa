@@ -81,6 +81,7 @@ summary:focus-visible {
   width: 31px;
   height: 31px;
   color: var(--coral);
+  border-radius: 8px;
 }
 .brand strong {
   display: block;

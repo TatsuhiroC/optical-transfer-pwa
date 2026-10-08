@@ -106,12 +106,20 @@ Two installed copies of the same PWA (one in each role) work fully offline.
 
 ## Android APK / 安卓安装包
 
-The current app version series is **2.0.0**. APK filenames include the embedded
-app version and signing mode, such as `optical-transfer-2.0.0-dev.7+abcdef0-debug.apk`
-for an Actions build or `optical-transfer-2.0.0.apk` for a signed tagged release.
+The current app version is **2.0.1**. APK filenames include the embedded
+app version and signing mode, such as `optical-transfer-2.0.1-dev.9+abcdef0-release.apk`
+for an Actions build or `optical-transfer-2.0.1.apk` for a signed tagged release.
 
-当前应用版本从 **2.0.0** 开始。APK 文件名包含实际应用版本与签名类型；
-Actions 测试包保留 `dev` 和 `debug` 标识，正式标签发布为 `optical-transfer-2.0.0.apk`。
+当前应用版本为 **2.0.1**。APK 文件名包含实际应用版本与签名类型；
+Actions 开发包保留 `dev` 标识，正式标签发布为 `optical-transfer-2.0.1.apk`。
+
+Icons share the vector source `resources/brand-mark.svg`. Run `npm run icons` to
+regenerate PWA, Apple touch, Android adaptive and monochrome icons. Existing home
+screen shortcuts may retain their old icon; after updating the web app, remove the
+old shortcut and add it again if needed.
+
+PWA、iPhone 桌面和 Android 图标共用 `resources/brand-mark.svg`，运行 `npm run icons`
+可重新生成。若已添加的桌面快捷方式仍显示旧图标，更新网页后移除旧快捷方式，再添加一次。
 
 Download the latest APK from [Releases](https://github.com/TatsuhiroC/optical-transfer-pwa/releases)
 (or `Actions → Build Android APK → Artifacts` for a dev build) and install it —

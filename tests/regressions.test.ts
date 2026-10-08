@@ -236,7 +236,8 @@ it('Android tag and branch version codes increase and config can be regenerated'
       expect(child.status).toBe(0);
       codes.push(Number(/versionCode (\d+)/.exec(readFileSync(join(folder, 'app/build.gradle'), 'utf8'))![1]));
       const gradle = readFileSync(join(folder, 'app/build.gradle'), 'utf8');
-      const expectedVersion = type === 'tag' ? '2.0.0' : `2.0.0-dev.${run}`;
+      const baseVersion = JSON.parse(readFileSync('package.json', 'utf8')).version;
+      const expectedVersion = type === 'tag' ? '2.0.0' : `${baseVersion}-dev.${run}`;
       expect(gradle).toContain(`versionName "${expectedVersion}`);
     }
   expect(codes).toEqual([100000011, 100000012, 100000013]);
