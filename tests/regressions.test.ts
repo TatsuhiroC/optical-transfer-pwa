@@ -224,7 +224,7 @@ it('Android tag and branch version codes increase and config can be regenerated'
   const folder = mkdtempSync(join(tmpdir(), 'optical-audit-version-'));
   try {
     const codes = [];
-    for (const [type, name, run] of [['branch', 'main', '11'], ['tag', 'v0.1.0', '12'], ['branch', 'main', '13']]) {
+    for (const [type, name, run] of [['branch', 'main', '11'], ['tag', 'v2.0.0', '12'], ['branch', 'main', '13']]) {
       mkdirSync(join(folder, 'app/src/main'), { recursive: true });
       if (!existsSync(join(folder, 'app/build.gradle'))) writeFileSync(join(folder, 'app/build.gradle'), 'android {}\n');
       writeFileSync(join(folder, 'app/src/main/AndroidManifest.xml'), '<manifest></manifest>');
@@ -235,6 +235,9 @@ it('Android tag and branch version codes increase and config can be regenerated'
       });
       expect(child.status).toBe(0);
       codes.push(Number(/versionCode (\d+)/.exec(readFileSync(join(folder, 'app/build.gradle'), 'utf8'))![1]));
+      const gradle = readFileSync(join(folder, 'app/build.gradle'), 'utf8');
+      const expectedVersion = type === 'tag' ? '2.0.0' : `2.0.0-dev.${run}`;
+      expect(gradle).toContain(`versionName "${expectedVersion}`);
     }
   expect(codes).toEqual([100000011, 100000012, 100000013]);
     const finalGradle = readFileSync(join(folder, 'app/build.gradle'), 'utf8');
