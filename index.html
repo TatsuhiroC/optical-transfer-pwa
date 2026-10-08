@@ -6,214 +6,681 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#090b10" />
-    <title>光传输 — 喷泉码二维码文件传输</title>
+    <meta name="theme-color" content="#0b0e14" />
+    <title>光码互传</title>
     <link rel="stylesheet" href="./shared/style.css" />
   </head>
   <body>
-    <!-- credit -->
-    <div class="site-credit">
-      <p>
-        <span data-i18n="credit.by">by</span>
-        <a href="https://github.com/TatsuhiroC">TatsuhiroC</a> ·
-        <a href="https://github.com/TatsuhiroC/optical-transfer-pwa">optical-transfer-pwa</a> ·
-        <span data-i18n="credit.base">based on</span>
-        <a href="https://github.com/bashalarmistalt/decimen-optical-transfer">decimen-optical-transfer</a> (MIT)
-      </p>
-    </div>
-
-    <header class="topbar">
-      <h1>DECIMEN <small>— Fountain QR File Transfer</small></h1>
-      <nav class="mode" id="mode">
-        <a href="#/send" id="nav-send" data-i18n="nav.send">send</a>
-        <a href="#/receive" id="nav-receive" data-i18n="nav.receive">receive</a>
+    <div class="shell">
+      <header class="topbar">
+        <a
+          class="brand"
+          href="#/"
+          aria-label="光码互传首页"
+          data-i18n-aria-label="ui.goToOpticalTransferHome"
+          ><svg
+            class="brand-mark"
+            viewBox="0 0 32 32"
+            fill="none"
+            aria-hidden="true"
+          >
+            <rect
+              x="3"
+              y="3"
+              width="9"
+              height="9"
+              rx="2"
+              stroke="currentColor"
+              stroke-width="2"
+            />
+            <rect
+              x="20"
+              y="3"
+              width="9"
+              height="9"
+              rx="2"
+              stroke="currentColor"
+              stroke-width="2"
+            />
+            <rect
+              x="3"
+              y="20"
+              width="9"
+              height="9"
+              rx="2"
+              stroke="currentColor"
+              stroke-width="2"
+            />
+            <path
+              d="M21 20v9m8-9v9m-8-5h8M16 5v7M5 16h7M16 20v9"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            /></svg
+          ><span
+            ><strong data-i18n="landing.title">光码互传</strong
+            ><small>OPTICAL TRANSFER</small></span
+          ></a
+        ><button
+          id="lang-btn"
+          class="js-lang-btn language-toggle"
+          aria-label="Switch to English"
+        >
+          EN
+        </button>
+      </header>
+      <nav
+        class="mode"
+        id="mode"
+        aria-label="切换页面"
+        data-i18n-aria-label="ui.navigation"
+      >
+        <a id="nav-home" href="#/" data-i18n="nav.home">首页</a
+        ><a id="nav-send" href="#/send" data-i18n="nav.send">发送</a
+        ><a id="nav-receive" href="#/receive" data-i18n="nav.receive">接收</a>
       </nav>
-      <button id="lang-btn" class="js-lang-btn ghost small">中文</button>
-      <button id="app-update" class="ghost small" hidden></button>
-    </header>
-
-    <!-- landing -->
-    <section id="view-landing" class="view">
-      <header class="app-header">
-        <div class="eyebrow">DECIMEN · OPTICAL TRANSFER</div>
-        <h1 data-i18n="landing.title">光码互传</h1>
-        <p data-i18n="landing.subtitle">一个应用，两种角色——文件化作光传输。不联网、不配对。</p>
-      </header>
-      <p class="hint" data-i18n="landing.hint1">
-        两台设备装同一应用：一台发送、一台接收——屏幕对镜头。
-      </p>
-      <div class="role-buttons">
-        <button id="btn-send" data-i18n="landing.send">发送文件</button>
-        <button id="btn-receive" data-i18n="landing.receive">接收</button>
-      </div>
-    </section>
-
-    <!-- send -->
-    <section id="view-send" class="view" hidden>
-      <header class="app-header">
-        <div class="eyebrow">QRSEND · OPTICAL TRANSMITTER</div>
-        <h1 data-i18n="send.title">光码发送器</h1>
-        <p data-i18n="send.subtitle">选择任意文件，屏幕化作一束光码。</p>
-      </header>
-      <div class="hint status-pill" id="specs" data-i18n="send.choose">选择要发送的文件</div>
-      <div class="dropzone" id="dropzone">
-        <div class="dz-main">
-          <span data-i18n="send.drop">drag &amp; drop a file here, or</span>
-          <div class="actions">
-            <button type="button" id="btn-file" class="small" data-i18n="send.btnFile">choose file</button>
-            <button type="button" id="btn-photo" class="small" data-i18n="send.btnPhoto">photo / album</button>
+      <button
+        id="app-update"
+        class="secondary-button update-notice"
+        hidden
+      ></button>
+      <main>
+        <section id="view-landing" class="view hero">
+          <div class="home-copy">
+            <div class="eyebrow">SCREEN TO CAMERA</div>
+            <h1>
+              <span data-i18n="ui.letYourFiles">让文件，</span><br /><span
+                ><span data-i18n="ui.travelAsLight">以光抵达。</span></span
+              >
+            </h1>
+            <p class="intro">
+              <span data-i18n="ui.onePhoneLightsUpTheOther"
+                >一台手机亮起屏幕，另一台对准镜头。</span
+              ><br /><span data-i18n="ui.yourPhotosAndFilesTravelBetween"
+                >照片与文件，就这样传过去。</span
+              >
+            </p>
           </div>
-        </div>
-        <input id="file-input" type="file" hidden />
-        <input id="photo-input" type="file" accept="image/*" hidden />
-      </div>
-      <div class="file-meta" id="file-meta" hidden>
-        <span id="file-meta-text"></span>
-        <button type="button" id="file-clear" class="clear-btn" title="remove file">×</button>
-      </div>
-      <details class="settings">
-        <summary data-i18n="send.settings">Settings</summary>
-        <div class="row">
-          <label>
-            <span data-i18n="send.txFps">tx fps</span>
-            <select id="cfg-fps">
-              <option>10</option>
-              <option>15</option>
-              <option>20</option>
-              <option selected>24</option>
-              <option>30</option>
-              <option>60</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="send.bytes">bytes / frame</span>
-            <select id="cfg-bytes">
-              <option>500</option>
-              <option>1000</option>
-              <option>1465</option>
-              <option>1850</option>
-              <option selected>2331</option>
-              <option>2953</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="send.ecc">error correction</span>
-            <select id="cfg-ecc">
-              <option selected>L</option>
-              <option>M</option>
-              <option>Q</option>
-              <option>H</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="send.size">display size</span>
-            <input id="cfg-size" type="range" min="300" max="1200" step="50" value="900" />
-          </label>
-          <label>
-            <span data-i18n="send.lanes">QR codes</span>
-            <select id="cfg-lanes">
-              <option selected value="1">1</option>
-              <option value="2">2</option>
-            </select>
-          </label>
-        </div>
-        <div class="hint" style="text-align: left; padding-top: 8px" data-i18n="send.settingsHint">
-          Changes restart the stream — the receiver resets automatically (new
-          session id in the frame headers; that's the fountain protocol's gift).
-        </div>
-      </details>
-      <div class="stage" id="stage" hidden><canvas id="qr" width="16" height="16"></canvas></div>
-      <div class="actions" id="tx-actions" hidden>
-        <button type="button" id="btn-stop" class="ghost small" data-i18n="send.stop">stop</button>
-        <button type="button" id="btn-resend" class="ghost small" hidden data-i18n="send.resend">resend</button>
-      </div>
-      <div class="hint" id="tx-progress" hidden></div>
-      <div class="hint" data-i18n="send.hint">
-        Max screen brightness helps. Keep the stream running until the
-        receiver says done.
-      </div>
-    </section>
-
-    <!-- receive (UI matches qrrec.liuwa.xyz) -->
-    <section id="view-receive" class="view" hidden>
-      <header class="app-header">
-        <div class="eyebrow">QRREC · OPTICAL RECEIVER</div>
-        <h1 data-i18n="receive.rxTitle">光码接收器</h1>
-        <p data-i18n="receive.rxSubtitle">无需上传。让摄像头对准发送设备上的动态二维码。</p>
-      </header>
-      <div class="hint status-pill" id="stats" role="status" aria-live="polite" data-i18n="receive.stats">准备接收光码</div>
-      <section class="capabilities" aria-label="运行能力">
-        <div id="cap-secure"><span></span><small data-i18n="receive.capSecure">安全环境</small><b id="cap-secure-v" data-i18n="receive.capCheck">检测中</b></div>
-        <div id="cap-camera"><span></span><small data-i18n="receive.capCamera">摄像头</small><b id="cap-camera-v" data-i18n="receive.capPendingCam">待授权</b></div>
-        <div id="cap-worker"><span></span><small>Worker</small><b id="cap-worker-v" data-i18n="receive.capPending">待启动</b></div>
-        <div id="cap-wasm"><span></span><small>WASM</small><b id="cap-wasm-v" data-i18n="receive.capPending">待启动</b></div>
-      </section>
-      <details class="settings" id="settings">
-        <summary data-i18n="receive.settings">摄像头设置</summary>
-        <div class="row">
-          <label>
-            <span data-i18n="receive.capWidth">采集宽度</span>
-            <select id="cfg-width">
-              <option>960</option>
-              <option selected>1280</option>
-              <option>1920</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="receive.capFps">采集帧率</span>
-            <select id="cfg-capfps">
-              <option>30</option>
-              <option selected>60</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="receive.workers">解码线程</span>
-            <select id="cfg-workers">
-              <option>1</option>
-              <option selected>2</option>
-              <option>3</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="receive.track">自动追踪光码</span>
-            <input id="cfg-track" type="checkbox" checked />
-          </label>
-        </div>
-        <div class="hint left" data-i18n="receive.settingsHint">
-          默认设置适合大多数手机。若识别困难，请保持设备稳定并调高发送端亮度。
-        </div>
-      </details>
-      <button id="start" data-i18n="receive.start">开启摄像头接收</button>
-      <div class="metrics" id="metrics" style="display: none">
-        <div class="metric"><div class="k" data-i18n="m.cap">采集帧率</div><div class="v" id="m-cap">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.dec">解码帧率</div><div class="v amber" id="m-dec">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.rate">接收速度</div><div class="v amber" id="m-rate">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.time">已用时间</div><div class="v" id="m-time">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.frames">新帧/重复</div><div class="v" id="m-frames">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.k">源数据块</div><div class="v" id="m-k">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.block">单块大小</div><div class="v" id="m-block">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.payload">文件数据</div><div class="v" id="m-payload">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.scan">识别耗时</div><div class="v" id="m-scan">—</div></div>
-        <div class="metric"><div class="k" data-i18n="m.dropped">忙碌时跳过画面</div><div class="v" id="m-dropped">—</div></div>
-      </div>
-      <div class="preview" id="preview" style="display: none">
-        <video id="video" muted playsinline></video>
-        <div class="scan-guide"><span></span></div>
-      </div>
-      <section class="transfer-progress" id="progress" style="display: none">
-        <div class="progress-copy">
-          <div><strong data-i18n="receive.receiving">正在接收</strong><span id="progress-frames">0 / 0 帧</span></div>
-          <b id="progress-percent">0%</b>
-        </div>
-        <div class="progress"><div id="bar"></div></div>
-        <div class="frame-pulses" id="frame-pulses" aria-label="recent frames">
-          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        </div>
-      </section>
-      <button type="button" id="restart" class="secondary-button" style="display: none" data-i18n="receive.restart">重新接收</button>
-      <div id="result"></div>
-    </section>
-
+          <div class="home-visual">
+            <svg
+              class="optical-scene"
+              viewBox="0 0 384 206"
+              role="img"
+              aria-label="左边的手机显示光码，右边的手机用镜头接收"
+              data-i18n-aria-label="ui.theLeftPhoneDisplaysACode"
+            >
+              <defs>
+                <radialGradient id="aura">
+                  <stop stop-color="#ff9985" stop-opacity=".10" />
+                  <stop offset="1" stop-color="#ff9985" stop-opacity="0" />
+                </radialGradient>
+                <linearGradient id="beam" x1="0" x2="1">
+                  <stop stop-color="#ff9985" stop-opacity=".13" />
+                  <stop offset="1" stop-color="#ff9985" stop-opacity=".02" />
+                </linearGradient>
+              </defs>
+              <ellipse class="scene-aura" cx="192" cy="95" rx="185" ry="96" />
+              <path d="M130 76L254 52V143L130 116Z" fill="url(#beam)" />
+              <path class="light-path" d="M132 94H251" />
+              <circle class="signal-dot" cx="140" cy="94" r="3" />
+              <g transform="translate(63 15) rotate(-8 39 78)">
+                <rect class="phone-shell" width="79" height="151" rx="15" />
+                <rect
+                  class="phone-screen"
+                  x="6"
+                  y="6"
+                  width="67"
+                  height="139"
+                  rx="10"
+                />
+                <rect
+                  x="28"
+                  y="10"
+                  width="24"
+                  height="4"
+                  rx="2"
+                  fill="#343b48"
+                />
+                <rect
+                  x="17"
+                  y="41"
+                  width="46"
+                  height="46"
+                  rx="4"
+                  fill="#fff4ec"
+                />
+                <g fill="#25212a">
+                  <path
+                    d="M22 46h13v13H22zm25 0h11v13H47zM22 70h13v12H22zM39 61h6v6h-6zm10 5h5v5h-5zm-10 6h5v10h-5zm11 4h8v6h-8zM38 46h5v9h-5zM22 63h12v4H22z"
+                  />
+                  <path
+                    d="M25 49h7v7h-7zm25 0h5v7h-5zM25 73h7v6h-7z"
+                    fill="#fff4ec"
+                  />
+                </g>
+                <text class="diagram-label" x="40" y="113" text-anchor="middle">
+                  <tspan data-i18n="ui.sending">发送中</tspan>
+                </text>
+                <rect
+                  x="26"
+                  y="127"
+                  width="28"
+                  height="3"
+                  rx="1.5"
+                  fill="#ff998544"
+                />
+              </g>
+              <g transform="translate(246 15) rotate(8 39 78)">
+                <rect class="phone-shell" width="79" height="151" rx="15" />
+                <rect
+                  class="phone-screen"
+                  x="6"
+                  y="6"
+                  width="67"
+                  height="139"
+                  rx="10"
+                />
+                <rect
+                  x="28"
+                  y="10"
+                  width="24"
+                  height="4"
+                  rx="2"
+                  fill="#343b48"
+                />
+                <path
+                  d="M20 48v-8h8m23 0h8v8M20 75v8h8m23 0h8v-8"
+                  fill="none"
+                  stroke="#ffb089"
+                  stroke-width="1.7"
+                />
+                <rect
+                  x="31"
+                  y="53"
+                  width="18"
+                  height="18"
+                  rx="4"
+                  fill="#ff998518"
+                />
+                <path
+                  d="m35 62 3 3 7-7"
+                  fill="none"
+                  stroke="#ffb089"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                />
+                <text class="diagram-label" x="40" y="113" text-anchor="middle">
+                  <tspan data-i18n="ui.receiving">接收中</tspan>
+                </text>
+                <rect
+                  x="18"
+                  y="127"
+                  width="43"
+                  height="3"
+                  rx="1.5"
+                  fill="#ffffff10"
+                />
+                <rect
+                  x="18"
+                  y="127"
+                  width="29"
+                  height="3"
+                  rx="1.5"
+                  fill="#ff9985"
+                />
+              </g>
+              <text class="diagram-label" x="192" y="192" text-anchor="middle">
+                <tspan data-i18n="ui.screenToCameraNoUploads">
+                  屏幕对镜头 · 文件无需上传
+                </tspan>
+              </text>
+            </svg>
+            <div class="trust">
+              <span><i></i><span data-i18n="ui.noNetwork">无需网络</span></span
+              ><span><i></i><span data-i18n="ui.noPairing">无需配对</span></span
+              ><span
+                ><i></i><span data-i18n="ui.verifiedFiles">完整校验</span></span
+              >
+            </div>
+          </div>
+          <div class="role-grid">
+            <button class="role-card primary" id="btn-send">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M12 16V3m-5 5 5-5 5 5M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"
+                /></svg
+              ><span class="arrow">↗</span
+              ><strong><span data-i18n="ui.sendAFile">我要发送</span></strong
+              ><small
+                ><span data-i18n="ui.chooseAPhotoOrFile"
+                  >选择照片或文件</span
+                ></small
+              ></button
+            ><button class="role-card" id="btn-receive">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M12 3v13m-5-5 5 5 5-5M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"
+                /></svg
+              ><span class="arrow">↙</span
+              ><strong><span data-i18n="ui.receiveAFile">我要接收</span></strong
+              ><small
+                ><span data-i18n="ui.pointYourCameraAtACode"
+                  >用镜头对准光码</span
+                ></small
+              >
+            </button>
+          </div>
+          <p class="home-hint">
+            <span data-i18n="ui.openOpticalTransferOnBothDevices"
+              >两台设备都打开光码互传，即可开始。</span
+            >
+          </p>
+        </section>
+        <section id="view-send" class="view" hidden>
+          <div class="send-layout">
+            <div class="send-copy">
+              <div class="eyebrow">SEND WITH LIGHT</div>
+              <h1 class="send-ready-title">
+                <span data-i18n="ui.chooseAPhoto">选一张照片，</span><br /><span
+                  data-i18n="ui.orAFile"
+                  >或一份文件。</span
+                >
+              </h1>
+              <h1 class="send-file-title">
+                <span data-i18n="ui.haveTheOtherPhone">让另一台手机，</span
+                ><br /><span data-i18n="ui.pointHere">对准这里。</span>
+              </h1>
+              <p class="intro" data-i18n="send.subtitle">
+                发送时，让另一台手机对准你的屏幕。
+              </p>
+              <div class="file-meta" id="file-meta" hidden>
+                <span id="file-meta-text"></span
+                ><button
+                  type="button"
+                  id="file-clear"
+                  class="clear-btn"
+                  title="移除文件"
+                  data-i18n-title="send.clear"
+                >
+                  ×
+                </button>
+              </div>
+              <div class="actions" id="tx-actions" hidden>
+                <button
+                  type="button"
+                  id="btn-stop"
+                  class="secondary-button"
+                  data-i18n="send.stop"
+                >
+                  停止</button
+                ><button
+                  type="button"
+                  id="btn-resend"
+                  class="primary-button"
+                  hidden
+                  data-i18n="send.resend"
+                >
+                  重新发送
+                </button>
+              </div>
+              <p id="tx-progress" class="hint" hidden></p>
+              <p class="tip" data-i18n="ui.pickHint">
+                默认参数适合大多数手机。提高屏幕亮度并保持设备稳定。
+              </p>
+            </div>
+            <div class="send-workspace">
+              <div class="panel file-picker dropzone" id="dropzone">
+                <div class="photo-icon">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="4" />
+                    <circle cx="8" cy="8" r="1.5" />
+                    <path d="m4 17 5-5 4 4 3-3 5 5" />
+                  </svg>
+                </div>
+                <h2 data-i18n="ui.sendSomethingWorthSharing">
+                  把想分享的，传过去。
+                </h2>
+                <p data-i18n="ui.photosVideosDocumentsAllWelcome">
+                  照片、视频、文档，都可以。
+                </p>
+                <button
+                  type="button"
+                  class="primary-button"
+                  id="btn-photo"
+                  data-i18n="send.btnPhoto"
+                >
+                  选择照片</button
+                ><button
+                  type="button"
+                  class="secondary-button"
+                  id="btn-file"
+                  data-i18n="send.btnFile"
+                >
+                  选择其他文件
+                </button>
+                <p class="desktop-drop" data-i18n="send.drop">
+                  也可把文件拖到这里
+                </p>
+                <input id="file-input" type="file" hidden /><input
+                  id="photo-input"
+                  type="file"
+                  accept="image/*"
+                  hidden
+                />
+              </div>
+              <div class="stage" id="stage" hidden>
+                <canvas id="qr" width="16" height="16"></canvas>
+              </div>
+              <div id="send-paused" class="panel ready-camera" hidden>
+                <h2 data-i18n="ui.txPaused">发送已暂停</h2>
+                <p data-i18n="ui.txPausedHint">点击重新发送。</p>
+              </div>
+            </div>
+          </div>
+          <details class="settings">
+            <summary data-i18n="send.settings">Settings</summary>
+            <div class="row">
+              <label>
+                <span data-i18n="send.txFps">tx fps</span>
+                <select id="cfg-fps">
+                  <option>10</option>
+                  <option>15</option>
+                  <option>20</option>
+                  <option selected>24</option>
+                  <option>30</option>
+                  <option>60</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="send.bytes">bytes / frame</span>
+                <select id="cfg-bytes">
+                  <option>500</option>
+                  <option>1000</option>
+                  <option>1465</option>
+                  <option>1850</option>
+                  <option selected>2331</option>
+                  <option>2953</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="send.ecc">error correction</span>
+                <select id="cfg-ecc">
+                  <option selected>L</option>
+                  <option>M</option>
+                  <option>Q</option>
+                  <option>H</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="send.size">display size</span>
+                <input
+                  id="cfg-size"
+                  type="range"
+                  min="300"
+                  max="1200"
+                  step="50"
+                  value="900"
+                />
+              </label>
+              <label>
+                <span data-i18n="send.lanes">QR codes</span>
+                <select id="cfg-lanes">
+                  <option selected value="1">1</option>
+                  <option value="2">2</option>
+                </select>
+              </label>
+            </div>
+            <div
+              class="hint"
+              style="text-align: left; padding-top: 8px"
+              data-i18n="send.settingsHint"
+            >
+              Changes restart the stream — the receiver resets automatically
+              (new session id in the frame headers; that's the fountain
+              protocol's gift).
+            </div>
+          </details>
+          <div class="hint" id="specs" role="status" data-i18n="send.choose">
+            选择要发送的文件
+          </div>
+        </section>
+        <section id="view-receive" class="view" hidden>
+          <div class="rx-ready-copy">
+            <div class="eyebrow">RECEIVE WITH CAMERA</div>
+            <h1>
+              <span data-i18n="ui.pointYourCamera">对准屏幕，</span><br /><span
+                data-i18n="ui.catchTheLight"
+                >接住这束光。</span
+              >
+            </h1>
+            <p class="intro" data-i18n="receive.rxSubtitle">
+              把发送设备的光码放进取景框。
+            </p>
+          </div>
+          <div class="session-heading" id="rx-session-heading" hidden>
+            <div>
+              <h1 id="rx-title" data-i18n="ui.rxSearching">搜索光码</h1>
+              <small data-i18n="ui.secureNote">文件无需上传。</small>
+            </div>
+          </div>
+          <div
+            class="state-tag"
+            id="rx-state"
+            data-i18n="ui.rxReady"
+            role="status"
+          >
+            准备接收
+          </div>
+          <div class="panel ready-camera" id="rx-idle">
+            <i class="corner tl"></i><i class="corner tr"></i
+            ><i class="corner bl"></i><i class="corner br"></i
+            ><svg viewBox="0 0 32 32" aria-hidden="true">
+              <path
+                d="M9 9 11 5h10l2 4h3a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V12a3 3 0 0 1 3-3Z"
+              />
+              <circle cx="16" cy="17" r="6" />
+            </svg>
+            <p>
+              <span data-i18n="ui.yourCameraViewWillAppearHere"
+                >开启后，在这里对准光码</span
+              >
+            </p>
+          </div>
+          <button
+            id="start"
+            class="primary-button receive-cta"
+            data-i18n="receive.start"
+          >
+            开启摄像头接收
+          </button>
+          <details class="settings" id="settings">
+            <summary data-i18n="receive.settings">摄像头设置</summary>
+            <div class="row">
+              <label>
+                <span data-i18n="receive.capWidth">采集宽度</span>
+                <select id="cfg-width">
+                  <option>960</option>
+                  <option selected>1280</option>
+                  <option>1920</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="receive.capFps">采集帧率</span>
+                <select id="cfg-capfps">
+                  <option>30</option>
+                  <option selected>60</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="receive.workers">解码线程</span>
+                <select id="cfg-workers">
+                  <option>1</option>
+                  <option selected>2</option>
+                  <option>3</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="receive.track">自动追踪光码</span>
+                <input id="cfg-track" type="checkbox" checked />
+              </label>
+            </div>
+            <div class="hint left" data-i18n="receive.settingsHint">
+              默认设置适合大多数手机。若识别困难，请保持设备稳定并调高发送端亮度。
+            </div>
+          </details>
+          <div class="preview" id="preview" style="display: none">
+            <video id="video" muted playsinline></video>
+            <div class="scan-guide">
+              <i class="corner tl"></i><i class="corner tr"></i
+              ><i class="corner bl"></i><i class="corner br"></i>
+            </div>
+          </div>
+          <section
+            class="transfer-progress panel"
+            id="progress"
+            style="display: none"
+          >
+            <div class="progress-copy">
+              <div>
+                <strong id="rx-file" data-i18n="ui.waitingForAFile"
+                  >等待识别文件</strong
+                ><span id="rx-size"></span>
+              </div>
+              <b id="progress-percent">0%</b>
+            </div>
+            <div class="progress"><div id="bar"></div></div>
+            <div class="core-metrics">
+              <div class="metric">
+                <div class="k" data-i18n="m.rate">接收速度</div>
+                <div class="v amber" id="m-rate">—</div>
+              </div>
+              <div class="metric">
+                <div class="k" data-i18n="m.time">已用时间</div>
+                <div class="v" id="m-time">—</div>
+              </div>
+            </div>
+          </section>
+          <p
+            id="rx-guidance"
+            class="connection-hint"
+            data-i18n="receive.settingsHint"
+          >
+            请保持设备稳定。
+          </p>
+          <details id="rx-details" class="diagnostics">
+            <summary>
+              <span data-i18n="ui.diagnostics">详细信息</span
+              ><span data-i18n="ui.statsDetails">运行状态与识别指标</span>
+            </summary>
+            <section
+              class="capabilities"
+              aria-label="运行能力"
+              data-i18n-aria-label="ui.statsDetails"
+            >
+              <div id="cap-secure">
+                <span></span
+                ><small data-i18n="receive.capSecure">安全环境</small
+                ><b id="cap-secure-v" data-i18n="receive.capCheck">检测中</b>
+              </div>
+              <div id="cap-camera">
+                <span></span><small data-i18n="receive.capCamera">摄像头</small
+                ><b id="cap-camera-v" data-i18n="receive.capPendingCam"
+                  >待授权</b
+                >
+              </div>
+              <div id="cap-worker">
+                <span></span><small>Worker</small
+                ><b id="cap-worker-v" data-i18n="receive.capPending">待启动</b>
+              </div>
+              <div id="cap-wasm">
+                <span></span><small>WASM</small
+                ><b id="cap-wasm-v" data-i18n="receive.capPending">待启动</b>
+              </div>
+            </section>
+            <div class="metrics" id="metrics" style="display: none">
+              <div class="metric">
+                <div class="k" data-i18n="m.cap">采集帧率</div>
+                <div class="v" id="m-cap">—</div>
+              </div>
+              <div class="metric">
+                <div class="k" data-i18n="m.dec">解码帧率</div>
+                <div class="v amber" id="m-dec">—</div>
+              </div>
+              <div class="metric">
+                <div class="k" data-i18n="m.frames">新帧/重复</div>
+                <div class="v" id="m-frames">—</div>
+              </div>
+              <div class="metric">
+                <div class="k" data-i18n="m.k">源数据块</div>
+                <div class="v" id="m-k">—</div>
+              </div>
+              <div class="metric">
+                <div class="k" data-i18n="m.block">单块大小</div>
+                <div class="v" id="m-block">—</div>
+              </div>
+              <div class="metric">
+                <div class="k" data-i18n="m.payload">文件数据</div>
+                <div class="v" id="m-payload">—</div>
+              </div>
+              <div class="metric">
+                <div class="k" data-i18n="m.scan">识别耗时</div>
+                <div class="v" id="m-scan">—</div>
+              </div>
+              <div class="metric">
+                <div class="k" data-i18n="m.dropped">忙碌时跳过画面</div>
+                <div class="v" id="m-dropped">—</div>
+              </div>
+            </div>
+            <div id="progress-frames">0 / 0</div>
+            <div class="frame-pulses" id="frame-pulses" aria-hidden="true">
+              <span></span><span></span><span></span><span></span><span></span
+              ><span></span><span></span><span></span><span></span><span></span
+              ><span></span><span></span><span></span><span></span><span></span
+              ><span></span><span></span><span></span><span></span><span></span
+              ><span></span><span></span><span></span><span></span>
+            </div>
+          </details>
+          <p
+            class="hint"
+            id="stats"
+            role="status"
+            aria-live="polite"
+            data-i18n="receive.stats"
+          >
+            准备接收光码
+          </p>
+          <button
+            type="button"
+            id="restart"
+            class="secondary-button"
+            style="display: none"
+            data-i18n="receive.restart"
+          >
+            重新接收
+          </button>
+          <div id="result" class="complete-card panel" hidden></div>
+        </section>
+      </main>
+      <footer>
+        <details>
+          <summary>
+            <span data-i18n="ui.aboutCredits">关于光码互传与致谢</span>
+          </summary>
+          <p>
+            <span data-i18n="ui.by">作者</span>
+            <a href="https://github.com/TatsuhiroC">TatsuhiroC</a> ·
+            <a href="https://github.com/TatsuhiroC/optical-transfer-pwa"
+              >optical-transfer-pwa</a
+            ><br /><span data-i18n="ui.basedOn">基于</span>
+            <a
+              href="https://github.com/bashalarmistalt/decimen-optical-transfer"
+              >decimen-optical-transfer</a
+            >
+            · MIT
+          </p>
+        </details>
+      </footer>
+    </div>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

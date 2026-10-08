@@ -17,12 +17,12 @@ export default defineConfig({
       injectRegister: null,
       includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
       manifest: {
-        name: "DECIMEN Optical Transfer",
-        short_name: "OptTransfer",
+        name: "光码互传 · Optical Transfer",
+        short_name: "光码互传",
         description:
           "Send files between devices as fountain-coded animated QR codes — screen to camera, no network path.",
-        theme_color: "#121009",
-        background_color: "#121009",
+        theme_color: "#0b0e14",
+        background_color: "#0b0e14",
         display: "standalone",
         start_url: "./",
         icons: [

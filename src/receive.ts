@@ -1,30 +1,31 @@
-// Receive mode: camera → WASM QR decode in workers → fountain decoder → file.
-//
-// UI follows the qrrec.liuwa.xyz receiver design (the user's reference):
-// capability pills (secure context / camera / worker / wasm), camera
-// settings, a big gradient start button, an 8-cell metric grid, a compact
-// camera preview with a scan guide, and a transfer panel with frame pulses.
-//
-// Pipeline is unchanged from the original: capture width / fps / worker
-// count, `exact` fps demanded first (iOS lies with `ideal`),
-// requestVideoFrameCallback with a generation counter against zombie capture
-// loops, progress tracking frames COLLECTED (LT peeling back-loads).
-//
-// Camera robustness fixes over the earlier build: a failed getUserMedia no
-// longer swallows the controls — settings and the start button come back, the
-// camera pill flips to fail with the reason, and a permission denial gets its
-// own message. Re-entering the view resets `done` so a second transfer works.
+// Camera → worker decoding → integrity-checked file, with lightweight state feedback.
 
 import { Capacitor } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { DecodeLimitError, LTDecoder } from "../shared/fountain";
-import { fnv1a, headerReject, MAX_TRANSFER_BYTES, parseFrame, type FrameHeader } from "../shared/protocol";
+import {
+  fnv1a,
+  headerReject,
+  MAX_TRANSFER_BYTES,
+  parseFrame,
+  type FrameHeader,
+} from "../shared/protocol";
 import { setTransferActive, store } from "./store";
 import { ScreenWakeLock } from "./wake-lock";
 import { guessMime, sniffMime, hasExtension, extForMime } from "./util";
-import { t } from "./i18n";
+import { t, setText } from "./i18n";
 
+type ReceivePhase =
+  | "ready"
+  | "starting"
+  | "searching"
+  | "receiving"
+  | "waiting"
+  | "verifying"
+  | "complete"
+  | "error";
+let receivePhase: ReceivePhase | null = null;
 const OVERHEAD_EST = 1.18; // expected frames ≈ K × this (robust-soliton ε)
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -70,12 +71,55 @@ const captureTimes: number[] = [];
 const decodeTimes: number[] = [];
 const scanSamples: { at: number; ms: number }[] = [];
 
-function capSet(id: string, state: "pass" | "fail" | "", text: string) {
+function capSet(id: string, state: "pass" | "fail" | "", key: string) {
   const el = $(id);
   el.classList.remove("pass", "fail");
   if (state) el.classList.add(state);
   const b = el.querySelector("b");
-  if (b) b.textContent = text;
+  if (b) setText(b, key);
+}
+
+/** State feedback changes once per transition, never per captured frame. */
+function showPhase(next: ReceivePhase) {
+  if (receivePhase === next) return;
+  receivePhase = next;
+  const view = $("view-receive");
+  const active = ["searching", "receiving", "waiting", "verifying"].includes(
+    next,
+  );
+  view.classList.toggle("rx-active", active);
+  view.classList.toggle("rx-complete", next === "complete");
+  view.classList.toggle("rx-receiving", next === "receiving");
+  view.classList.toggle("rx-waiting", next === "waiting");
+  $("rx-session-heading").hidden = !active;
+  const key = {
+    ready: "ui.rxReady",
+    starting: "ui.rxStarting",
+    searching: "ui.rxSearching",
+    receiving: "ui.rxReceiving",
+    waiting: "ui.rxWaiting",
+    verifying: "ui.rxVerifying",
+    complete: "ui.rxComplete",
+    error: "ui.rxError",
+  }[next];
+  setText($("rx-state"), key);
+  setText($("rx-title"), key);
+  $("rx-state").classList.toggle(
+    "good",
+    next === "receiving" || next === "complete",
+  );
+  $("rx-state").classList.toggle("wait", next === "waiting");
+  $("rx-state").classList.toggle("error", next === "error");
+  setText(
+    $("rx-guidance"),
+    next === "waiting"
+      ? "ui.waitHint"
+      : next === "receiving"
+        ? "ui.codeRecognizedCollectingFileData"
+        : next === "searching"
+          ? "ui.keepTheEntireCodeInsideThe"
+          : "receive.settingsHint",
+  );
 }
 
 startBtn.onclick = () => void start();
@@ -97,28 +141,34 @@ function stopCapture() {
   setTransferActive("receive", false);
 }
 
-function failReceive(message: string) {
+function failReceive(key: string) {
   stopCapture();
   done = true;
   decoder = null;
   session = null;
   preview.style.display = "none";
-  stats.textContent = message;
+  showPhase("error");
+  setText(stats, key);
+  progressEl.style.display = "none";
+  metricsEl.style.display = "none";
   restartBtn.style.display = "block";
 }
 
 async function start() {
   if (!entered || running || starting) return;
-  const secure = window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
+  const secure =
+    window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
   if (!secure) {
-    capSet("cap-secure", "fail", t("receive.capFail"));
-    stats.textContent = t("receive.secure");
+    capSet("cap-secure", "fail", "receive.capFail");
+    showPhase("error");
+    setText(stats, "receive.secure");
     return;
   }
   const gen = ++captureGen;
   starting = true;
+  showPhase("starting");
   setTransferActive("receive", true);
-  capSet("cap-secure", "pass", t("receive.capPass"));
+  capSet("cap-secure", "pass", "receive.capPass");
   const captureWidth = Number(($("cfg-width") as HTMLSelectElement).value);
   const captureFps = Number(($("cfg-capfps") as HTMLSelectElement).value);
   const workerCount = Number(($("cfg-workers") as HTMLSelectElement).value);
@@ -135,13 +185,16 @@ async function start() {
     let granted: MediaStream;
     try {
       granted = await navigator.mediaDevices.getUserMedia({
-        audio: false, video: { ...base, frameRate: { exact: captureFps } },
+        audio: false,
+        video: { ...base, frameRate: { exact: captureFps } },
       });
     } catch (err) {
       if (gen !== captureGen || !entered) return;
-      if (!(err instanceof DOMException && err.name === "OverconstrainedError")) throw err;
+      if (!(err instanceof DOMException && err.name === "OverconstrainedError"))
+        throw err;
       granted = await navigator.mediaDevices.getUserMedia({
-        audio: false, video: { ...base, frameRate: { ideal: captureFps } },
+        audio: false,
+        video: { ...base, frameRate: { ideal: captureFps } },
       });
     }
     if (gen !== captureGen || !entered) {
@@ -154,27 +207,38 @@ async function start() {
     if (gen !== captureGen || !entered) return;
     running = true;
     starting = false;
-    capSet("cap-camera", "pass", t("receive.capPass"));
-    stats.textContent = t("receive.searching");
+    capSet("cap-camera", "pass", "receive.capPass");
+    showPhase("searching");
+    setText(stats, "receive.searching");
     preview.style.display = "block";
     metricsEl.style.display = "grid";
     progressEl.style.display = "block";
     for (let i = 0; i < workerCount; i++) {
-      const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+      const w = new Worker(new URL("./worker.ts", import.meta.url), {
+        type: "module",
+      });
       const slot = i;
       const armTimeout = () => {
         clearTimeout(workerTimers[slot]);
         workerTimers[slot] = window.setTimeout(() => {
-          if (gen === captureGen && running) failReceive(t("receive.workerErr"));
+          if (gen === captureGen && running) failReceive("receive.workerErr");
         }, 15000);
       };
       w.onmessage = (e: MessageEvent) => {
         if (gen !== captureGen || !running || done) return;
-        const { id, bytes, ok, scanMs } = e.data as { id: number; bytes?: Uint8Array[] | null; ok?: boolean; scanMs?: number };
+        const { id, bytes, ok, scanMs } = e.data as {
+          id: number;
+          bytes?: Uint8Array[] | null;
+          ok?: boolean;
+          scanMs?: number;
+        };
         clearTimeout(workerTimers[slot]);
         if (id === -1) {
-          if (!ok) { failReceive(t("receive.workerErr")); return; }
-          capSet("cap-wasm", "pass", t("receive.capPass"));
+          if (!ok) {
+            failReceive("receive.workerErr");
+            return;
+          }
+          capSet("cap-wasm", "pass", "receive.capPass");
         }
         if (id !== -1 && Number.isFinite(scanMs) && scanMs! >= 0) {
           scanSamples.push({ at: performance.now(), ms: scanMs! });
@@ -186,13 +250,13 @@ async function start() {
         }
       };
       w.onerror = w.onmessageerror = () => {
-        if (gen === captureGen && running) failReceive(t("receive.workerErr"));
+        if (gen === captureGen && running) failReceive("receive.workerErr");
       };
       workers.push(w);
       busy.push(true); // do not send capture buffers until WASM reports ready
       armTimeout();
     }
-    capSet("cap-worker", "pass", t("receive.capPass"));
+    capSet("cap-worker", "pass", "receive.capPass");
     scheduleFrame(gen);
     statsTimer = window.setInterval(updateStats, 200);
     wakeLock.setActive(true);
@@ -205,22 +269,31 @@ async function start() {
     metricsEl.style.display = "none";
     progressEl.style.display = "none";
     restartBtn.style.display = "none";
-    capSet("cap-camera", "fail", t("receive.capFail"));
-    const denied = err instanceof DOMException &&
+    capSet("cap-camera", "fail", "receive.capFail");
+    const denied =
+      err instanceof DOMException &&
       (err.name === "NotAllowedError" || err.name === "PermissionDeniedError");
-    stats.textContent = denied ? t("receive.camDenied") :
-      t("receive.camErr", { msg: err instanceof Error ? err.message : String(err) });
+    showPhase("error");
+    setText(stats, denied ? "receive.camDenied" : "receive.camErr", {
+      msg: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
-type VideoRVFC = HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number };
+type VideoRVFC = HTMLVideoElement & {
+  requestVideoFrameCallback?: (cb: () => void) => number;
+};
 
 function scheduleFrame(gen: number) {
   if (done || gen !== captureGen) return;
   const v = video as VideoRVFC;
   const next = () => {
     if (done || gen !== captureGen) return;
-    try { captureFrame(); } catch { failReceive(t("receive.workerErr")); }
+    try {
+      captureFrame();
+    } catch {
+      failReceive("receive.workerErr");
+    }
     scheduleFrame(gen);
   };
   if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(next);
@@ -237,7 +310,10 @@ function captureFrame() {
   captureTimes.push(performance.now());
   captureCount++;
   const slot = busy.indexOf(false);
-  if (slot === -1) { busyDrops++; return; } // bounded queue; fountain tolerates missed frames
+  if (slot === -1) {
+    busyDrops++;
+    return;
+  } // bounded queue; fountain tolerates missed frames
   if (grab.width !== vw || grab.height !== vh) {
     grab.width = vw;
     grab.height = vh;
@@ -249,11 +325,12 @@ function captureFrame() {
   clearTimeout(workerTimers[slot]);
   const gen = captureGen;
   workerTimers[slot] = window.setTimeout(() => {
-    if (gen === captureGen && running) failReceive(t("receive.workerErr"));
+    if (gen === captureGen && running) failReceive("receive.workerErr");
   }, 15000);
-  workers[slot]!.postMessage({ id: frameId++, buf: img.data.buffer, w: vw, h: vh, track: trackRegion }, [
-    img.data.buffer,
-  ]);
+  workers[slot]!.postMessage(
+    { id: frameId++, buf: img.data.buffer, w: vw, h: vh, track: trackRegion },
+    [img.data.buffer],
+  );
 }
 
 /** Batch visual progress at 5 Hz, without forcing layout on the camera path. */
@@ -264,13 +341,27 @@ function renderProgress() {
   const progress = Math.min(0.99, decoder.framesNew / target);
   bar.style.width = `${(progress * 100).toFixed(1)}%`;
   progressPercent.textContent = `${(progress * 100).toFixed(0)}%`;
-  progressFrames.textContent = `${decoder.framesNew} / ${target} ${t("receive.framesSuffix")}`;
+  setText(progressFrames, "ui.progressFrames", {
+    n: decoder.framesNew,
+    m: target,
+  });
   if (pulses.length) {
     const end = pulseIdx % pulses.length;
     const lit = Math.min(freshSinceRender, pulses.length);
-    pulses.forEach((p, i) => p.classList.toggle("active", (end - 1 - i + pulses.length) % pulses.length < lit));
+    pulses.forEach((p, i) =>
+      p.classList.toggle(
+        "active",
+        (end - 1 - i + pulses.length) % pulses.length < lit,
+      ),
+    );
   }
   freshSinceRender = 0;
+}
+
+function showRxFile(name: string, totalLen: number) {
+  if (name) $("rx-file").textContent = safeName(name);
+  else setText($("rx-file"), "receive.noname");
+  $("rx-size").textContent = `${Math.round(totalLen / 1024)} KB`;
 }
 
 function onDecoded(bytes: Uint8Array) {
@@ -283,49 +374,69 @@ function onDecoded(bytes: Uint8Array) {
     // Trustworthy streams never land here (see headerReject). Say it once so a
     // user pointing at a crafted or corrupt sender is not left guessing.
     if (stats.textContent !== t("receive.badStream")) {
-      stats.textContent = t("receive.badStream");
+      setText(stats, "receive.badStream");
     }
     return;
   }
   if (header.totalLen > MAX_TRANSFER_BYTES) {
-    failReceive(t("receive.limit"));
+    failReceive("receive.limit");
     return;
   }
   if (!decoder || session?.header.sessionId !== header.sessionId) {
-    decoder = new LTDecoder(header.k, header.blockLen, header.sessionId, header.totalLen);
+    decoder = new LTDecoder(
+      header.k,
+      header.blockLen,
+      header.sessionId,
+      header.totalLen,
+    );
     session = { header: { ...header }, name: parsed.name };
     startTs = performance.now();
     lastFrameTs = startTs;
     pulseIdx = 0;
     freshSinceRender = 0;
+    showRxFile(session.name, header.totalLen);
   } else {
     const first = session.header;
-    if (first.k !== header.k || first.blockLen !== header.blockLen ||
-        first.totalLen !== header.totalLen || first.payloadFnv !== header.payloadFnv ||
-        (session.name && parsed.name && session.name !== parsed.name)) {
-      stats.textContent = t("receive.badStream");
+    if (
+      first.k !== header.k ||
+      first.blockLen !== header.blockLen ||
+      first.totalLen !== header.totalLen ||
+      first.payloadFnv !== header.payloadFnv ||
+      (session.name && parsed.name && session.name !== parsed.name)
+    ) {
+      setText(stats, "receive.badStream");
       return;
     }
-    if (!session.name && parsed.name) session.name = parsed.name;
+    if (!session.name && parsed.name) {
+      session.name = parsed.name;
+      showRxFile(session.name, session.header.totalLen);
+    }
   }
   const previous = decoder.framesNew;
-  try { decoder.addFrame(header.seq, block); }
-  catch (err) {
-    failReceive(t(err instanceof DecodeLimitError ? "receive.limit" : "receive.badStream"));
+  try {
+    decoder.addFrame(header.seq, block);
+  } catch (err) {
+    failReceive(
+      err instanceof DecodeLimitError ? "receive.limit" : "receive.badStream",
+    );
     return;
   }
   if (decoder.framesNew > previous) {
     lastFrameTs = performance.now();
+    if (stats.textContent) stats.textContent = "";
+    showPhase("receiving");
+
     pulseIdx++;
     freshSinceRender++;
     progressDirty = true;
   }
 
   if (decoder.isComplete) {
+    showPhase("verifying");
     const payload = decoder.assemble()!;
     const seconds = (performance.now() - startTs) / 1000;
     if (fnv1a(payload) !== session!.header.payloadFnv) {
-      failReceive(t("receive.hashFailed"));
+      failReceive("receive.hashFailed");
       return;
     }
     finish(payload, seconds, session!.header.totalLen, session!.name);
@@ -351,7 +462,10 @@ function safeName(raw: string): string {
   return /^[.\s]*$/.test(cleaned) ? t("receive.noname") : cleaned;
 }
 
-function resolveFileMeta(payload: Uint8Array, name: string): { fileName: string; mime: string } {
+function resolveFileMeta(
+  payload: Uint8Array,
+  name: string,
+): { fileName: string; mime: string } {
   const sniffed = sniffMime(payload);
   const raw = safeName(name);
   const mime = sniffed ?? guessMime(raw);
@@ -382,7 +496,9 @@ async function savePayload(
 ): Promise<string> {
   if (!Capacitor.isNativePlatform()) {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([payload as BlobPart], { type: mime }));
+    a.href = URL.createObjectURL(
+      new Blob([payload as BlobPart], { type: mime }),
+    );
     a.download = fileName;
     a.click();
     const url = a.href;
@@ -396,107 +512,158 @@ async function savePayload(
     data: payloadToBase64(payload),
     recursive: true,
   });
-  const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Documents });
+  const { uri } = await Filesystem.getUri({
+    path: fileName,
+    directory: Directory.Documents,
+  });
   return uri;
 }
 
 /** Hand the payload to the system share sheet (Android has no navigator.share in a WebView). */
-async function sharePayload(payload: Uint8Array, fileName: string): Promise<void> {
+async function sharePayload(
+  payload: Uint8Array,
+  fileName: string,
+): Promise<void> {
   // Shares do not overwrite a user's saved document; FileProvider permits Cache.
   const path = `${crypto.randomUUID()}-${fileName}`;
-  await Filesystem.writeFile({ path, directory: Directory.Cache, data: payloadToBase64(payload) });
+  await Filesystem.writeFile({
+    path,
+    directory: Directory.Cache,
+    data: payloadToBase64(payload),
+  });
   try {
-    const { uri } = await Filesystem.getUri({ path, directory: Directory.Cache });
+    const { uri } = await Filesystem.getUri({
+      path,
+      directory: Directory.Cache,
+    });
     await Share.share({ title: fileName, files: [uri] });
   } catch (err) {
-    if (!(err instanceof Error && /^(Share canceled|Share cancelled)$/.test(err.message))) throw err;
+    if (
+      !(
+        err instanceof Error &&
+        /^(Share canceled|Share cancelled)$/.test(err.message)
+      )
+    )
+      throw err;
   } finally {
-    await Filesystem.deleteFile({ path, directory: Directory.Cache }).catch(() => undefined);
+    await Filesystem.deleteFile({ path, directory: Directory.Cache }).catch(
+      () => undefined,
+    );
   }
 }
 
-function finish(payload: Uint8Array, seconds: number, totalLen: number, name: string) {
+function finish(
+  payload: Uint8Array,
+  seconds: number,
+  totalLen: number,
+  name: string,
+) {
   done = true;
   stopCapture();
   decoder = null;
   session = null;
   const resultGen = captureGen;
+  showPhase("complete");
+  result.hidden = false;
   preview.style.display = "none";
   bar.style.width = "100%";
   progressPercent.textContent = "100%";
   const { fileName, mime } = resolveFileMeta(payload, name);
   const kb = Math.round(totalLen / 1024);
   const rate = (totalLen / 1024 / seconds).toFixed(1);
-  stats.textContent = t("receive.summary", {
+  setText(stats, "receive.summary", {
     name: fileName,
     kb,
     sec: seconds.toFixed(1),
     rate,
     ok: t("receive.hashOk"),
   });
-  const heading = document.createElement("div");
+  const icon = document.createElement("div");
+  icon.className = "success-icon";
+  icon.innerHTML =
+    '<svg viewBox="0 0 28 28" aria-hidden="true"><path d="m6 14 5 5 11-12"/></svg>';
+  result.append(icon);
+  const heading = document.createElement("h2");
   heading.className = "done";
-  heading.textContent = t("receive.done");
+  setText(heading, "receive.done");
   result.append(heading);
+  const verified = document.createElement("span");
+  verified.className = "verified";
+  setText(verified, "ui.verified");
+  result.append(verified);
+  const fileLabel = document.createElement("p");
+  fileLabel.className = "received-name";
+  fileLabel.textContent = `${fileName} · ${kb} KB`;
+  result.append(fileLabel);
 
   const isImage = mime.startsWith("image/");
   if (isImage) {
     const img = document.createElement("img");
     img.className = "received";
-    img.src = URL.createObjectURL(new Blob([payload as BlobPart], { type: mime }));
+    img.src = URL.createObjectURL(
+      new Blob([payload as BlobPart], { type: mime }),
+    );
     previewUrls.add(img.src);
     result.append(img);
   }
 
   const dl = document.createElement("button");
   dl.className = "download-button";
-  dl.textContent = t("receive.save");
+  setText(dl, "receive.save");
   dl.onclick = () => {
     dl.disabled = true;
-    dl.textContent = t("receive.saving");
+    setText(dl, "receive.saving");
     savePayload(payload, fileName, mime)
       .then((where) => {
         if (resultGen !== captureGen || !entered) return;
-        stats.textContent = t("receive.saved", { path: where });
+        setText(stats, "receive.saved", { path: where });
       })
       .catch((err: unknown) => {
         if (resultGen !== captureGen || !entered) return;
-        stats.textContent = t("receive.saveErr", {
+        setText(stats, "receive.saveErr", {
           msg: err instanceof Error ? err.message : String(err),
         });
       })
       .finally(() => {
         dl.disabled = false;
-        dl.textContent = t("receive.save");
+        setText(dl, "receive.save");
       });
   };
   result.append(dl);
 
   const file = new File([payload as BlobPart], fileName, { type: mime });
   const nativeShell = Capacitor.isNativePlatform();
-  if (nativeShell || (navigator.share && navigator.canShare?.({ files: [file] }))) {
+  if (
+    nativeShell ||
+    (navigator.share && navigator.canShare?.({ files: [file] }))
+  ) {
     const share = document.createElement("button");
-    share.className = "secondary-button";
-    share.textContent = t("receive.share");
+    share.className = "secondary-button share-button";
+    result.classList.add("has-share");
+    setText(share, "receive.share");
     share.onclick = () => {
       if (!nativeShell) {
         void navigator.share({ files: [file] }).catch(() => undefined);
         return;
       }
       share.disabled = true;
-      void sharePayload(payload, fileName).catch((err: unknown) => {
-        if (resultGen !== captureGen || !entered) return;
-        stats.textContent = t("receive.saveErr", {
-          msg: err instanceof Error ? err.message : String(err),
+      void sharePayload(payload, fileName)
+        .catch((err: unknown) => {
+          if (resultGen !== captureGen || !entered) return;
+          setText(stats, "receive.saveErr", {
+            msg: err instanceof Error ? err.message : String(err),
+          });
+        })
+        .finally(() => {
+          share.disabled = false;
         });
-      }).finally(() => { share.disabled = false; });
     };
     result.append(share);
   }
 
   const fwd = document.createElement("button");
-  fwd.className = "secondary-button";
-  fwd.textContent = t("receive.forward");
+  fwd.className = "secondary-button forward-button";
+  setText(fwd, "receive.forward");
   fwd.onclick = () => {
     store.pending = { payload, name: fileName, mime };
     location.hash = "#/send";
@@ -512,18 +679,31 @@ function updateStats() {
   };
   prune(captureTimes);
   prune(decodeTimes);
-  while (scanSamples.length && scanSamples[0]!.at < now - 2000) scanSamples.shift();
+  while (scanSamples.length && scanSamples[0]!.at < now - 2000)
+    scanSamples.shift();
   metric("m-cap").textContent = (captureTimes.length / 2).toFixed(0);
   metric("m-dec").textContent = (decodeTimes.length / 2).toFixed(1);
-  metric("m-scan").textContent = scanSamples.length ?
-    `${(scanSamples.reduce((sum, s) => sum + s.ms, 0) / scanSamples.length).toFixed(1)} ms` : "—";
-  metric("m-dropped").textContent = captureCount ? `${(busyDrops / captureCount * 100).toFixed(0)}%` : "—";
+  metric("m-scan").textContent = scanSamples.length
+    ? `${(scanSamples.reduce((sum, s) => sum + s.ms, 0) / scanSamples.length).toFixed(1)} ms`
+    : "—";
+  metric("m-dropped").textContent = captureCount
+    ? `${((busyDrops / captureCount) * 100).toFixed(0)}%`
+    : "—";
   if (!decoder) return;
   renderProgress();
-  if (now - lastFrameTs > 60000) { failReceive(t("receive.stalled")); return; }
+  showPhase(now - lastFrameTs > 1500 ? "waiting" : "receiving");
+  if (now - lastFrameTs > 60000) {
+    failReceive("receive.stalled");
+    return;
+  }
   const elapsed = (now - startTs) / 1000;
-  const kbs = (decoder.framesNew * decoder.blockLen) / OVERHEAD_EST / 1024 / Math.max(0.1, elapsed);
-  metric("m-rate").textContent = `${kbs.toFixed(1)} KB/s`;
+  const kbs =
+    (decoder.framesNew * decoder.blockLen) /
+    OVERHEAD_EST /
+    1024 /
+    Math.max(0.1, elapsed);
+  metric("m-rate").textContent =
+    `${(receivePhase === "waiting" ? 0 : kbs).toFixed(1)} KB/s`;
   metric("m-time").textContent = `${elapsed.toFixed(0)} s`;
   metric("m-frames").textContent = `${decoder.framesNew}/${decoder.framesDup}`;
   metric("m-k").textContent = String(decoder.k);
@@ -538,6 +718,7 @@ function updateStats() {
 function resetReceive() {
   done = false;
   stopCapture();
+  showPhase("ready");
   decoder = null;
   session = null;
   for (const url of previewUrls) URL.revokeObjectURL(url);
@@ -553,20 +734,30 @@ function resetReceive() {
   pulseIdx = 0;
   pulses.forEach((p) => p.classList.remove("active"));
   result.innerHTML = "";
+  result.hidden = true;
+  result.classList.remove("has-share");
+  setText($("rx-file"), "ui.waitingForAFile");
+  $("rx-size").textContent = "";
+  metric("m-rate").textContent = "—";
+  metric("m-time").textContent = "—";
   bar.style.width = "0%";
   progressPercent.textContent = "0%";
-  progressFrames.textContent = `0 / 0 ${t("receive.framesSuffix")}`;
+  setText(progressFrames, "ui.progressFrames", { n: 0, m: 0 });
   progressEl.style.display = "none";
   preview.style.display = "none";
   metricsEl.style.display = "none";
   restartBtn.style.display = "none";
   settings.style.display = "";
   startBtn.style.display = "";
-  capSet("cap-camera", "", t("receive.capPendingCam"));
-  capSet("cap-worker", "", t("receive.capPending"));
-  capSet("cap-wasm", "", t("receive.capPending"));
-  capSet("cap-secure", window.isSecureContext ? "pass" : "fail", window.isSecureContext ? t("receive.capPass") : t("receive.capFail"));
-  stats.textContent = t("receive.stats");
+  capSet("cap-camera", "", "receive.capPendingCam");
+  capSet("cap-worker", "", "receive.capPending");
+  capSet("cap-wasm", "", "receive.capPending");
+  capSet(
+    "cap-secure",
+    window.isSecureContext ? "pass" : "fail",
+    window.isSecureContext ? "receive.capPass" : "receive.capFail",
+  );
+  setText(stats, "receive.stats");
 }
 
 restartBtn.onclick = resetReceive;

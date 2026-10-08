@@ -1,3 +1,4 @@
+import { uiEn, uiZh } from "./ui-copy";
 // Minimal i18n: en / 中文 dictionaries, a t() lookup with {placeholder}
 // substitution, and a language toggle persisted in localStorage. Static HTML
 // text is wired via data-i18n attributes; dynamic strings go through t().
@@ -7,22 +8,25 @@ export type Lang = "en" | "zh";
 type Dict = Record<string, string>;
 
 const en: Dict = {
-  "nav.send": "send",
-  "nav.receive": "receive",
+  ...uiEn,
+  "nav.home": "Home",
+  "nav.send": "Send",
+  "nav.receive": "Receive",
   "lang.toggle": "中文",
   "landing.title": "Optical Transfer",
-  "landing.subtitle": "One app, two roles — files travel as light. No network, no pairing.",
+  "landing.subtitle":
+    "One app, two roles — files travel as light. No network, no pairing.",
   "landing.hint1":
     "Two devices run the same app: one sends, one receives — screen to camera.",
   "landing.send": "Send a file",
   "landing.receive": "Receive",
 
-  "send.title": "Light-Code Sender",
-  "send.subtitle": "Pick any file — the screen becomes a stream of light.",
+  "send.title": "Choose a photo, or a file.",
+  "send.subtitle": "Have the other phone point its camera at your screen.",
   "send.choose": "choose a file to transmit",
-  "send.drop": "drag & drop a file here, or",
-  "send.btnFile": "choose file",
-  "send.btnPhoto": "photo / album",
+  "send.drop": "You can also drop a file here",
+  "send.btnFile": "Choose another file",
+  "send.btnPhoto": "Choose a photo",
   "send.settings": "Settings",
   "send.txFps": "tx fps",
   "send.bytes": "bytes / frame",
@@ -30,9 +34,9 @@ const en: Dict = {
   "send.size": "display size",
   "send.lanes": "QR codes",
   "send.settingsHint":
-    "Changes restart the stream — the receiver resets automatically (new session id in the frame headers; that's the fountain protocol's gift).",
-  "send.stop": "stop",
-  "send.resend": "resend",
+    "Defaults suit most phones. Changing a setting restarts the stream and resets the receiver’s progress.",
+  "send.stop": "Stop",
+  "send.resend": "Resend",
   "send.clear": "remove file",
   "send.stopped": "stream stopped",
   "send.hint":
@@ -41,11 +45,15 @@ const en: Dict = {
   "send.tooManyBlocks":
     "✗ {name} needs {k} blocks but the protocol caps at 65535 — raise bytes/frame or pick a smaller file",
   "send.empty": "✗ that file is empty — there is nothing to transmit",
-  "send.memoryLimit": "✗ files are limited to 64 MiB to keep memory use bounded",
+  "send.memoryLimit":
+    "✗ files are limited to 64 MiB to keep memory use bounded",
   "send.readErr": "✗ could not read file: {msg}",
-  "receive.hashFailed": "✗ file verification failed — restart receiving; this file cannot be saved or forwarded",
-  "receive.limit": "✗ transfer exceeds the 64 MiB file limit or decoder memory/frame budget — restart receiving",
-  "receive.workerErr": "✗ decoder could not start or stopped responding — restart receiving",
+  "receive.hashFailed":
+    "✗ file verification failed — restart receiving; this file cannot be saved or forwarded",
+  "receive.limit":
+    "✗ transfer exceeds the 64 MiB file limit or decoder memory/frame budget — restart receiving",
+  "receive.workerErr":
+    "✗ decoder could not start or stopped responding — restart receiving",
   "receive.stalled": "✗ no new frames for 60 seconds — restart receiving",
   "app.update": "Update and reopen (clears current files)",
   "app.updateBusy": "Update available — finish or stop transfer first",
@@ -67,11 +75,11 @@ const en: Dict = {
   "receive.secure":
     "✗ camera needs a secure context — this page must be served over https to use the camera from another device.",
   "receive.camErr": "✗ camera: {msg}",
-  "receive.camDenied": "✗ camera permission denied — allow it in your browser settings and retry",
+  "receive.camDenied":
+    "✗ camera permission denied — allow it in your browser settings and retry",
   "receive.searching": "searching for a light-code stream…",
-  "receive.done": "Transfer Complete!",
-  "receive.summary":
-    "{name} · {kb} KB in {sec}s · {rate} KB/s · hash {ok}",
+  "receive.done": "Your file has arrived.",
+  "receive.summary": "{name} · {kb} KB in {sec}s · {rate} KB/s · hash {ok}",
   "receive.hashOk": "verified ✓",
   "receive.hashBad": "MISMATCH ✗",
   "receive.save": "Save file",
@@ -81,8 +89,9 @@ const en: Dict = {
   "receive.share": "Share",
   "receive.forward": "Send onward",
   "receive.noname": "received",
-  "receive.rxTitle": "Light-Code Receiver",
-  "receive.rxSubtitle": "No upload. Point the camera at the animated QR code on the sender.",
+  "receive.rxTitle": "Point your camera. Catch the light.",
+  "receive.rxSubtitle":
+    "No upload. Point the camera at the animated QR code on the sender.",
   "receive.capSecure": "Secure context",
   "receive.capCamera": "Camera",
   "receive.capCheck": "checking",
@@ -110,6 +119,8 @@ const en: Dict = {
 };
 
 const zh: Dict = {
+  ...uiZh,
+  "nav.home": "首页",
   "nav.send": "发送",
   "nav.receive": "接收",
   "lang.toggle": "EN",
@@ -119,12 +130,12 @@ const zh: Dict = {
   "landing.send": "发送文件",
   "landing.receive": "接收",
 
-  "send.title": "光码发送器",
-  "send.subtitle": "选择任意文件，屏幕化作一束光码。",
+  "send.title": "选一张照片，或一份文件。",
+  "send.subtitle": "发送时，让另一台手机对准你的屏幕。",
   "send.choose": "选择要发送的文件",
-  "send.drop": "把文件拖到这里，或",
-  "send.btnFile": "选择文件",
-  "send.btnPhoto": "相册 / 图库",
+  "send.drop": "也可把文件拖到这里",
+  "send.btnFile": "选择其他文件",
+  "send.btnPhoto": "选择照片",
   "send.settings": "设置",
   "send.txFps": "发送帧率",
   "send.bytes": "每帧字节数",
@@ -132,7 +143,7 @@ const zh: Dict = {
   "send.size": "显示尺寸",
   "send.lanes": "二维码数量",
   "send.settingsHint":
-    "修改会重启数据流——接收端会自动重置（帧头带新的 session id，这是喷泉码协议的礼物）。",
+    "默认设置适合大多数手机。修改参数会重新发送，并重置接收端的进度。",
   "send.stop": "停止",
   "send.resend": "重新发送",
   "send.clear": "移除文件",
@@ -169,8 +180,9 @@ const zh: Dict = {
   "receive.camErr": "✗ 摄像头：{msg}",
   "receive.camDenied": "✗ 摄像头权限被拒绝，请在浏览器设置中允许后重试",
   "receive.searching": "正在搜索光码…",
-  "receive.done": "传输完成！",
-  "receive.summary": "{name} · {kb} KB · 用时 {sec} 秒 · {rate} KB/s · 哈希{ok}",
+  "receive.done": "文件已抵达。",
+  "receive.summary":
+    "{name} · {kb} KB · 用时 {sec} 秒 · {rate} KB/s · 哈希{ok}",
   "receive.hashOk": "校验通过 ✓",
   "receive.hashBad": "不一致 ✗",
   "receive.save": "保存文件",
@@ -180,7 +192,7 @@ const zh: Dict = {
   "receive.share": "分享",
   "receive.forward": "转发给另一台设备",
   "receive.noname": "收到的文件",
-  "receive.rxTitle": "光码接收器",
+  "receive.rxTitle": "对准屏幕，接住这束光。",
   "receive.rxSubtitle": "无需上传。让摄像头对准发送设备上的动态二维码。",
   "receive.capSecure": "安全环境",
   "receive.capCamera": "摄像头",
@@ -214,7 +226,8 @@ let lang: Lang = "en";
 try {
   const saved = localStorage.getItem("otp-lang");
   if (saved === "en" || saved === "zh") lang = saved;
-  else if ((navigator.language || "en").toLowerCase().startsWith("zh")) lang = "zh";
+  else if ((navigator.language || "en").toLowerCase().startsWith("zh"))
+    lang = "zh";
 } catch {
   /* private mode etc. */
 }
@@ -224,19 +237,42 @@ export function getLang(): Lang {
 }
 
 /** Look up a string; {name} placeholders are replaced from `vars`. */
-export function t(key: I18nKey, vars?: Record<string, string | number>): string {
+export function t(
+  key: I18nKey,
+  vars?: Record<string, string | number>,
+): string {
   let s = (lang === "zh" ? zh[key] : en[key]) ?? en[key] ?? key;
   if (vars) {
-    for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
+    for (const [k, v] of Object.entries(vars))
+      s = s.replaceAll(`{${k}}`, String(v));
   }
   return s;
 }
 
 const staticEls = new Set<Element>();
+const attributeEls = new Set<Element>();
+const dynamicTexts = new Map<
+  Element,
+  { key: I18nKey; vars?: Record<string, string | number>; text: string }
+>();
+
+/** Remember the message and its values so a language switch never resets state. */
+export function setText(
+  el: Element,
+  key: I18nKey,
+  vars?: Record<string, string | number>,
+) {
+  for (const [old] of dynamicTexts)
+    if (old.isConnected === false) dynamicTexts.delete(old);
+  const text = t(key, vars);
+  el.textContent = text;
+  dynamicTexts.set(el, { key, vars, text });
+}
 const appliedStatic = new WeakMap<Element, string>();
 
 function applyStatic() {
   for (const el of staticEls) {
+    if (dynamicTexts.has(el)) continue;
     const key = el.getAttribute("data-i18n") as I18nKey | null;
     // Runtime status replaces these initial labels. Do not reset a live
     // progress/error/capability message when changing the language.
@@ -248,15 +284,40 @@ function applyStatic() {
       appliedStatic.set(el, text);
     }
   }
-  document.title = lang === "zh" ? "光传输 — 喷泉码二维码文件传输" : "Optical Transfer — fountain QR file transfer";
+  for (const el of attributeEls) {
+    for (const attr of ["aria-label", "title"]) {
+      const key = el.getAttribute(`data-i18n-${attr}`);
+      if (key) el.setAttribute(attr, t(key));
+    }
+  }
+  for (const [el, message] of dynamicTexts) {
+    if (el.isConnected === false || el.textContent !== message.text) {
+      dynamicTexts.delete(el);
+      continue;
+    }
+    message.text = t(message.key, message.vars);
+    el.textContent = message.text;
+  }
+  document.title =
+    lang === "zh"
+      ? "光传输 — 喷泉码二维码文件传输"
+      : "Optical Transfer — fountain QR file transfer";
   for (const btn of document.querySelectorAll(".js-lang-btn")) {
     btn.textContent = t("lang.toggle");
+    btn.setAttribute?.(
+      "aria-label",
+      lang === "zh" ? "Switch to English" : "切换为中文",
+    );
   }
 }
 
 /** Register an element wired via data-i18n (idempotent). */
 export function bindStatic(root: ParentNode = document) {
   for (const el of root.querySelectorAll("[data-i18n]")) staticEls.add(el);
+  for (const el of root.querySelectorAll(
+    "[data-i18n-aria-label], [data-i18n-title]",
+  ))
+    attributeEls.add(el);
 }
 
 export function setLang(l: Lang) {
