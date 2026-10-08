@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Buffer } from "node:buffer";
 import { LTDecoder, LTEncoder } from "../shared/fountain";
 import { fnv1a } from "../shared/protocol";
 
@@ -65,8 +66,11 @@ describe("LT fountain code", () => {
       }
     }
     expect(dec.isComplete).toBe(true);
-    expect(dec.assemble()).toEqual(data);
-  });
+    const restored = dec.assemble()!;
+    // Native byte comparison still checks every byte; recursively diffing a
+    // 1.7 MiB typed array can exhaust Vitest's 5 s default on shared CI runners.
+    expect(Buffer.from(restored).equals(Buffer.from(data))).toBe(true);
+  }, 15_000);
 
   it("pads and trims the tail block correctly", () => {
     // 100 bytes over two blocks: the second block is mostly padding and must not
