@@ -41,8 +41,17 @@ const en: Dict = {
   "send.tooManyBlocks":
     "✗ {name} needs {k} blocks but the protocol caps at 65535 — raise bytes/frame or pick a smaller file",
   "send.empty": "✗ that file is empty — there is nothing to transmit",
+  "send.memoryLimit": "✗ files are limited to 64 MiB to keep memory use bounded",
+  "send.readErr": "✗ could not read file: {msg}",
+  "receive.hashFailed": "✗ file verification failed — restart receiving; this file cannot be saved or forwarded",
+  "receive.limit": "✗ transfer exceeds the 64 MiB file limit or decoder memory/frame budget — restart receiving",
+  "receive.workerErr": "✗ decoder could not start or stopped responding — restart receiving",
+  "receive.stalled": "✗ no new frames for 60 seconds — restart receiving",
+  "app.update": "Update and reopen (clears current files)",
+  "app.updateBusy": "Update available — finish or stop transfer first",
   "send.genErr": "✗ {msg}",
   "send.progress": "frames sent: {n} · receiver needs ~{m} of any",
+  "send.actualFps": "actual {fps} fps",
 
   "receive.stats": "ready to receive light codes",
   "receive.badStream":
@@ -51,6 +60,7 @@ const en: Dict = {
   "receive.capWidth": "capture width",
   "receive.capFps": "capture fps",
   "receive.workers": "decode workers",
+  "receive.track": "Auto-track light codes",
   "receive.settingsHint":
     "Defaults suit most phones. If decoding is hard, hold the device steady and raise the sender's screen brightness.",
   "receive.start": "Start receiving",
@@ -88,6 +98,8 @@ const en: Dict = {
   "credit.base": "based on",
 
   "m.cap": "capture fps",
+  "m.scan": "scan time",
+  "m.dropped": "frames skipped while busy",
   "m.dec": "decode fps",
   "m.rate": "throughput",
   "m.time": "elapsed",
@@ -130,8 +142,17 @@ const zh: Dict = {
   "send.tooManyBlocks":
     "✗ {name} 需要 {k} 个块，但协议上限是 65535——调大每帧字节数，或换个更小的文件",
   "send.empty": "✗ 该文件为空，没有可发送的内容",
+  "send.memoryLimit": "✗ 为控制内存使用，文件大小上限为 64 MiB",
+  "send.readErr": "✗ 无法读取文件：{msg}",
+  "receive.hashFailed": "✗ 文件校验失败，请重新接收；此文件不能保存或转发",
+  "receive.limit": "✗ 已超过 64 MiB 文件上限或解码内存/帧数限制，请重新接收",
+  "receive.workerErr": "✗ 解码器启动失败或无响应，请重新接收",
+  "receive.stalled": "✗ 已连续 60 秒没有收到新帧，请重新接收",
+  "app.update": "更新并重新打开（会清除当前文件）",
+  "app.updateBusy": "有可用更新，请先完成或停止传输",
   "send.genErr": "✗ {msg}",
   "send.progress": "已发送 {n} 帧 · 接收端任意收集 ~{m} 帧即可",
+  "send.actualFps": "实际 {fps} 帧/秒",
 
   "receive.stats": "准备接收光码",
   "receive.badStream": "✗ 已忽略非法的光码流——帧头描述的不是一个合法文件",
@@ -139,6 +160,7 @@ const zh: Dict = {
   "receive.capWidth": "采集宽度",
   "receive.capFps": "采集帧率",
   "receive.workers": "解码线程",
+  "receive.track": "自动追踪光码",
   "receive.settingsHint":
     "默认设置适合大多数手机。若识别困难，请保持设备稳定并调高发送端亮度。",
   "receive.start": "开启摄像头接收",
@@ -175,6 +197,8 @@ const zh: Dict = {
   "credit.base": "基于",
 
   "m.cap": "采集帧率",
+  "m.scan": "识别耗时",
+  "m.dropped": "忙碌时跳过画面",
   "m.dec": "解码帧率",
   "m.rate": "接收速度",
   "m.time": "已用时间",
@@ -209,11 +233,20 @@ export function t(key: I18nKey, vars?: Record<string, string | number>): string 
 }
 
 const staticEls = new Set<Element>();
+const appliedStatic = new WeakMap<Element, string>();
 
 function applyStatic() {
   for (const el of staticEls) {
     const key = el.getAttribute("data-i18n") as I18nKey | null;
-    if (key && el.textContent !== t(key)) el.textContent = t(key);
+    // Runtime status replaces these initial labels. Do not reset a live
+    // progress/error/capability message when changing the language.
+    const previous = appliedStatic.get(el);
+    if (previous !== undefined && el.textContent !== previous) continue;
+    if (key) {
+      const text = t(key);
+      el.textContent = text;
+      appliedStatic.set(el, text);
+    }
   }
   document.title = lang === "zh" ? "光传输 — 喷泉码二维码文件传输" : "Optical Transfer — fountain QR file transfer";
   for (const btn of document.querySelectorAll(".js-lang-btn")) {

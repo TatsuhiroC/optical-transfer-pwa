@@ -18,9 +18,10 @@
 import { Capacitor } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
-import { LTDecoder } from "../shared/fountain";
-import { fnv1a, headerReject, parseFrame } from "../shared/protocol";
-import { store } from "./store";
+import { DecodeLimitError, LTDecoder } from "../shared/fountain";
+import { fnv1a, headerReject, MAX_TRANSFER_BYTES, parseFrame, type FrameHeader } from "../shared/protocol";
+import { setTransferActive, store } from "./store";
+import { ScreenWakeLock } from "./wake-lock";
 import { guessMime, sniffMime, hasExtension, extForMime } from "./util";
 import { t } from "./i18n";
 
@@ -45,16 +46,29 @@ const pulses = [...$("frame-pulses").children] as HTMLElement[];
 let pulseIdx = 0;
 let stream: MediaStream | null = null;
 let decoder: LTDecoder | null = null;
-let sessionId = 0;
+let session: { header: FrameHeader; name: string } | null = null;
+let entered = false;
+let running = false;
+let starting = false;
+let lastFrameTs = 0;
+const wakeLock = new ScreenWakeLock();
+const previewUrls = new Set<string>();
+const workerTimers: number[] = [];
 let startTs = 0;
 let captureGen = 0;
 let done = false;
 let statsTimer: number | undefined;
+let progressDirty = false;
+let freshSinceRender = 0;
+let captureCount = 0;
+let busyDrops = 0;
+let trackRegion = true;
 
 const workers: Worker[] = [];
 const busy: boolean[] = [];
 const captureTimes: number[] = [];
 const decodeTimes: number[] = [];
+const scanSamples: { at: number; ms: number }[] = [];
 
 function capSet(id: string, state: "pass" | "fail" | "", text: string) {
   const el = $(id);
@@ -66,101 +80,136 @@ function capSet(id: string, state: "pass" | "fail" | "", text: string) {
 
 startBtn.onclick = () => void start();
 
+function stopCapture() {
+  captureGen++;
+  running = false;
+  starting = false;
+  stream?.getTracks().forEach((track) => track.stop());
+  stream = null;
+  video.srcObject = null;
+  for (const w of workers) w.terminate();
+  workers.length = 0;
+  busy.length = 0;
+  for (const timer of workerTimers) clearTimeout(timer);
+  workerTimers.length = 0;
+  clearInterval(statsTimer);
+  wakeLock.setActive(false);
+  setTransferActive("receive", false);
+}
+
+function failReceive(message: string) {
+  stopCapture();
+  done = true;
+  decoder = null;
+  session = null;
+  preview.style.display = "none";
+  stats.textContent = message;
+  restartBtn.style.display = "block";
+}
+
 async function start() {
+  if (!entered || running || starting) return;
   const secure = window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
   if (!secure) {
     capSet("cap-secure", "fail", t("receive.capFail"));
     stats.textContent = t("receive.secure");
     return;
   }
+  const gen = ++captureGen;
+  starting = true;
+  setTransferActive("receive", true);
   capSet("cap-secure", "pass", t("receive.capPass"));
   const captureWidth = Number(($("cfg-width") as HTMLSelectElement).value);
   const captureFps = Number(($("cfg-capfps") as HTMLSelectElement).value);
   const workerCount = Number(($("cfg-workers") as HTMLSelectElement).value);
+  trackRegion = ($("cfg-track") as HTMLInputElement).checked !== false;
   settings.style.display = "none";
   startBtn.style.display = "none";
-  preview.style.display = "block";
-  metricsEl.style.display = "grid";
-  progressEl.style.display = "block";
+  restartBtn.style.display = "block";
   const base: MediaTrackConstraints = {
     facingMode: "environment",
     width: { ideal: captureWidth },
     height: { ideal: Math.round((captureWidth * 3) / 4) },
   };
   try {
+    let granted: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { ...base, frameRate: { exact: captureFps } },
+      granted = await navigator.mediaDevices.getUserMedia({
+        audio: false, video: { ...base, frameRate: { exact: captureFps } },
       });
-    } catch {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { ...base, frameRate: { ideal: captureFps } },
+    } catch (err) {
+      if (gen !== captureGen || !entered) return;
+      if (!(err instanceof DOMException && err.name === "OverconstrainedError")) throw err;
+      granted = await navigator.mediaDevices.getUserMedia({
+        audio: false, video: { ...base, frameRate: { ideal: captureFps } },
       });
     }
+    if (gen !== captureGen || !entered) {
+      granted.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    stream = granted;
+    video.srcObject = granted;
+    await video.play();
+    if (gen !== captureGen || !entered) return;
+    running = true;
+    starting = false;
+    capSet("cap-camera", "pass", t("receive.capPass"));
+    stats.textContent = t("receive.searching");
+    preview.style.display = "block";
+    metricsEl.style.display = "grid";
+    progressEl.style.display = "block";
+    for (let i = 0; i < workerCount; i++) {
+      const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+      const slot = i;
+      const armTimeout = () => {
+        clearTimeout(workerTimers[slot]);
+        workerTimers[slot] = window.setTimeout(() => {
+          if (gen === captureGen && running) failReceive(t("receive.workerErr"));
+        }, 15000);
+      };
+      w.onmessage = (e: MessageEvent) => {
+        if (gen !== captureGen || !running || done) return;
+        const { id, bytes, ok, scanMs } = e.data as { id: number; bytes?: Uint8Array[] | null; ok?: boolean; scanMs?: number };
+        clearTimeout(workerTimers[slot]);
+        if (id === -1) {
+          if (!ok) { failReceive(t("receive.workerErr")); return; }
+          capSet("cap-wasm", "pass", t("receive.capPass"));
+        }
+        if (id !== -1 && Number.isFinite(scanMs) && scanMs! >= 0) {
+          scanSamples.push({ at: performance.now(), ms: scanMs! });
+        }
+        busy[slot] = false;
+        for (const b of bytes ?? []) {
+          if (gen !== captureGen || !running) break;
+          onDecoded(b);
+        }
+      };
+      w.onerror = w.onmessageerror = () => {
+        if (gen === captureGen && running) failReceive(t("receive.workerErr"));
+      };
+      workers.push(w);
+      busy.push(true); // do not send capture buffers until WASM reports ready
+      armTimeout();
+    }
+    capSet("cap-worker", "pass", t("receive.capPass"));
+    scheduleFrame(gen);
+    statsTimer = window.setInterval(updateStats, 200);
+    wakeLock.setActive(true);
   } catch (err) {
-    // Camera failed — bring the controls back so the user can retry (e.g.
-    // after granting permission in settings), and say why.
+    if (gen !== captureGen || !entered) return;
+    stopCapture();
     settings.style.display = "";
     startBtn.style.display = "";
     preview.style.display = "none";
     metricsEl.style.display = "none";
     progressEl.style.display = "none";
+    restartBtn.style.display = "none";
     capSet("cap-camera", "fail", t("receive.capFail"));
-    const denied =
-      err instanceof DOMException &&
+    const denied = err instanceof DOMException &&
       (err.name === "NotAllowedError" || err.name === "PermissionDeniedError");
-    stats.textContent = denied
-      ? t("receive.camDenied")
-      : t("receive.camErr", { msg: err instanceof Error ? err.message : String(err) });
-    return;
-  }
-  capSet("cap-camera", "pass", t("receive.capPass"));
-  video.srcObject = stream;
-  await video.play().catch(() => undefined);
-  stats.textContent = t("receive.searching");
-  restartBtn.style.display = "block"; // restart is available while scanning
-
-  // tear down any workers from a previous session, then spin up fresh ones
-  for (const w of workers) w.terminate();
-  workers.length = 0;
-  busy.length = 0;
-  for (let i = 0; i < workerCount; i++) {
-    const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-    const slot = i;
-    w.onmessage = (e: MessageEvent) => {
-      const { id, bytes, ok } = e.data as {
-        id: number;
-        bytes?: Uint8Array[] | null;
-        ok?: boolean;
-      };
-      if (id === -1) {
-        // Warm-up: the worker only reports success once the WASM module is up.
-        capSet("cap-wasm", ok ? "pass" : "fail", ok ? t("receive.capPass") : t("receive.capFail"));
-        return;
-      }
-      busy[slot] = false;
-      // Dual-lane senders deliver two codes per camera frame; both belong
-      // to the same fountain stream (disjoint seq ranges), so the decoder
-      // dedups and both count as progress. A frame that failed to decode (or
-      // held no code) arrives as null — normal, just skip it.
-      for (const b of bytes ?? []) onDecoded(b);
-    };
-    workers.push(w);
-    busy.push(false);
-  }
-  capSet("cap-worker", "pass", t("receive.capPass"));
-
-  captureGen++;
-  scheduleFrame(captureGen);
-  clearInterval(statsTimer);
-  statsTimer = window.setInterval(updateStats, 500);
-  try {
-    await (navigator as Navigator & { wakeLock?: { request(t: "screen"): Promise<unknown> } })
-      .wakeLock?.request("screen");
-  } catch {
-    /* fine */
+    stats.textContent = denied ? t("receive.camDenied") :
+      t("receive.camErr", { msg: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -171,7 +220,7 @@ function scheduleFrame(gen: number) {
   const v = video as VideoRVFC;
   const next = () => {
     if (done || gen !== captureGen) return;
-    captureFrame();
+    try { captureFrame(); } catch { failReceive(t("receive.workerErr")); }
     scheduleFrame(gen);
   };
   if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(next);
@@ -186,8 +235,9 @@ function captureFrame() {
   const vh = video.videoHeight;
   if (!vw || !vh) return;
   captureTimes.push(performance.now());
+  captureCount++;
   const slot = busy.indexOf(false);
-  if (slot === -1) return; // all workers busy — drop the frame, no harm done
+  if (slot === -1) { busyDrops++; return; } // bounded queue; fountain tolerates missed frames
   if (grab.width !== vw || grab.height !== vh) {
     grab.width = vw;
     grab.height = vh;
@@ -196,26 +246,37 @@ function captureFrame() {
   ctx.drawImage(video, 0, 0);
   const img = ctx.getImageData(0, 0, vw, vh);
   busy[slot] = true;
-  workers[slot]!.postMessage({ id: frameId++, buf: img.data.buffer, w: vw, h: vh }, [
+  clearTimeout(workerTimers[slot]);
+  const gen = captureGen;
+  workerTimers[slot] = window.setTimeout(() => {
+    if (gen === captureGen && running) failReceive(t("receive.workerErr"));
+  }, 15000);
+  workers[slot]!.postMessage({ id: frameId++, buf: img.data.buffer, w: vw, h: vh, track: trackRegion }, [
     img.data.buffer,
   ]);
 }
 
-/** Light one of the 24 pulse dots per fresh frame (ring buffer). */
-function pulse() {
-  const p = pulses[pulseIdx % pulses.length];
-  pulseIdx++;
-  if (p) {
-    p.classList.remove("active");
-    void p.offsetWidth; // restart the CSS transition
-    p.classList.add("active");
+/** Batch visual progress at 5 Hz, without forcing layout on the camera path. */
+function renderProgress() {
+  if (!progressDirty || !decoder) return;
+  progressDirty = false;
+  const target = Math.ceil(decoder.k * OVERHEAD_EST);
+  const progress = Math.min(0.99, decoder.framesNew / target);
+  bar.style.width = `${(progress * 100).toFixed(1)}%`;
+  progressPercent.textContent = `${(progress * 100).toFixed(0)}%`;
+  progressFrames.textContent = `${decoder.framesNew} / ${target} ${t("receive.framesSuffix")}`;
+  if (pulses.length) {
+    const end = pulseIdx % pulses.length;
+    const lit = Math.min(freshSinceRender, pulses.length);
+    pulses.forEach((p, i) => p.classList.toggle("active", (end - 1 - i + pulses.length) % pulses.length < lit));
   }
+  freshSinceRender = 0;
 }
 
 function onDecoded(bytes: Uint8Array) {
   decodeTimes.push(performance.now());
   const parsed = parseFrame(bytes);
-  if (!parsed || done) return;
+  if (!parsed || done || !running) return;
   const { header, block } = parsed;
   const reject = headerReject(header);
   if (reject) {
@@ -226,25 +287,48 @@ function onDecoded(bytes: Uint8Array) {
     }
     return;
   }
-  if (!decoder || sessionId !== header.sessionId) {
-    decoder = new LTDecoder(header.k, header.blockLen, header.sessionId, header.totalLen);
-    sessionId = header.sessionId;
-    startTs = performance.now();
-    pulseIdx = 0;
+  if (header.totalLen > MAX_TRANSFER_BYTES) {
+    failReceive(t("receive.limit"));
+    return;
   }
-  decoder.addFrame(header.seq, block);
-  pulse();
-  const target = Math.ceil(decoder.k * OVERHEAD_EST);
-  const progress = Math.min(0.99, decoder.framesNew / target);
-  bar.style.width = `${(progress * 100).toFixed(1)}%`;
-  progressPercent.textContent = `${(progress * 100).toFixed(0)}%`;
-  progressFrames.textContent = `${decoder.framesNew} / ${target} ${t("receive.framesSuffix")}`;
+  if (!decoder || session?.header.sessionId !== header.sessionId) {
+    decoder = new LTDecoder(header.k, header.blockLen, header.sessionId, header.totalLen);
+    session = { header: { ...header }, name: parsed.name };
+    startTs = performance.now();
+    lastFrameTs = startTs;
+    pulseIdx = 0;
+    freshSinceRender = 0;
+  } else {
+    const first = session.header;
+    if (first.k !== header.k || first.blockLen !== header.blockLen ||
+        first.totalLen !== header.totalLen || first.payloadFnv !== header.payloadFnv ||
+        (session.name && parsed.name && session.name !== parsed.name)) {
+      stats.textContent = t("receive.badStream");
+      return;
+    }
+    if (!session.name && parsed.name) session.name = parsed.name;
+  }
+  const previous = decoder.framesNew;
+  try { decoder.addFrame(header.seq, block); }
+  catch (err) {
+    failReceive(t(err instanceof DecodeLimitError ? "receive.limit" : "receive.badStream"));
+    return;
+  }
+  if (decoder.framesNew > previous) {
+    lastFrameTs = performance.now();
+    pulseIdx++;
+    freshSinceRender++;
+    progressDirty = true;
+  }
 
   if (decoder.isComplete) {
     const payload = decoder.assemble()!;
     const seconds = (performance.now() - startTs) / 1000;
-    const ok = fnv1a(payload) === header.payloadFnv;
-    finish(payload, ok, seconds, header.totalLen, parsed.name);
+    if (fnv1a(payload) !== session!.header.payloadFnv) {
+      failReceive(t("receive.hashFailed"));
+      return;
+    }
+    finish(payload, seconds, session!.header.totalLen, session!.name);
   }
 }
 
@@ -301,6 +385,9 @@ async function savePayload(
     a.href = URL.createObjectURL(new Blob([payload as BlobPart], { type: mime }));
     a.download = fileName;
     a.click();
+    const url = a.href;
+    // Let the browser consume the download before releasing its Blob.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     return fileName;
   }
   await Filesystem.writeFile({
@@ -310,21 +397,30 @@ async function savePayload(
     recursive: true,
   });
   const { uri } = await Filesystem.getUri({ path: fileName, directory: Directory.Documents });
-  return uri.replace(/^file:\/\//, "");
+  return uri;
 }
 
 /** Hand the payload to the system share sheet (Android has no navigator.share in a WebView). */
 async function sharePayload(payload: Uint8Array, fileName: string): Promise<void> {
-  const saved = await savePayload(payload, fileName);
-  stats.textContent = t("receive.saved", { path: saved });
-  // Dismissing the sheet rejects as well — the file is saved by now, so ignore it.
-  await Share.share({ title: fileName, files: [saved] }).catch(() => undefined);
+  // Shares do not overwrite a user's saved document; FileProvider permits Cache.
+  const path = `${crypto.randomUUID()}-${fileName}`;
+  await Filesystem.writeFile({ path, directory: Directory.Cache, data: payloadToBase64(payload) });
+  try {
+    const { uri } = await Filesystem.getUri({ path, directory: Directory.Cache });
+    await Share.share({ title: fileName, files: [uri] });
+  } catch (err) {
+    if (!(err instanceof Error && /^(Share canceled|Share cancelled)$/.test(err.message))) throw err;
+  } finally {
+    await Filesystem.deleteFile({ path, directory: Directory.Cache }).catch(() => undefined);
+  }
 }
 
-function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen: number, name: string) {
+function finish(payload: Uint8Array, seconds: number, totalLen: number, name: string) {
   done = true;
-  captureGen++;
-  stream?.getTracks().forEach((t) => t.stop());
+  stopCapture();
+  decoder = null;
+  session = null;
+  const resultGen = captureGen;
   preview.style.display = "none";
   bar.style.width = "100%";
   progressPercent.textContent = "100%";
@@ -336,7 +432,7 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
     kb,
     sec: seconds.toFixed(1),
     rate,
-    ok: hashOk ? t("receive.hashOk") : t("receive.hashBad"),
+    ok: t("receive.hashOk"),
   });
   const heading = document.createElement("div");
   heading.className = "done";
@@ -348,6 +444,7 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
     const img = document.createElement("img");
     img.className = "received";
     img.src = URL.createObjectURL(new Blob([payload as BlobPart], { type: mime }));
+    previewUrls.add(img.src);
     result.append(img);
   }
 
@@ -359,9 +456,11 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
     dl.textContent = t("receive.saving");
     savePayload(payload, fileName, mime)
       .then((where) => {
+        if (resultGen !== captureGen || !entered) return;
         stats.textContent = t("receive.saved", { path: where });
       })
       .catch((err: unknown) => {
+        if (resultGen !== captureGen || !entered) return;
         stats.textContent = t("receive.saveErr", {
           msg: err instanceof Error ? err.message : String(err),
         });
@@ -384,11 +483,13 @@ function finish(payload: Uint8Array, hashOk: boolean, seconds: number, totalLen:
         void navigator.share({ files: [file] }).catch(() => undefined);
         return;
       }
+      share.disabled = true;
       void sharePayload(payload, fileName).catch((err: unknown) => {
+        if (resultGen !== captureGen || !entered) return;
         stats.textContent = t("receive.saveErr", {
           msg: err instanceof Error ? err.message : String(err),
         });
-      });
+      }).finally(() => { share.disabled = false; });
     };
     result.append(share);
   }
@@ -411,9 +512,15 @@ function updateStats() {
   };
   prune(captureTimes);
   prune(decodeTimes);
+  while (scanSamples.length && scanSamples[0]!.at < now - 2000) scanSamples.shift();
   metric("m-cap").textContent = (captureTimes.length / 2).toFixed(0);
   metric("m-dec").textContent = (decodeTimes.length / 2).toFixed(1);
+  metric("m-scan").textContent = scanSamples.length ?
+    `${(scanSamples.reduce((sum, s) => sum + s.ms, 0) / scanSamples.length).toFixed(1)} ms` : "—";
+  metric("m-dropped").textContent = captureCount ? `${(busyDrops / captureCount * 100).toFixed(0)}%` : "—";
   if (!decoder) return;
+  renderProgress();
+  if (now - lastFrameTs > 60000) { failReceive(t("receive.stalled")); return; }
   const elapsed = (now - startTs) / 1000;
   const kbs = (decoder.framesNew * decoder.blockLen) / OVERHEAD_EST / 1024 / Math.max(0.1, elapsed);
   metric("m-rate").textContent = `${kbs.toFixed(1)} KB/s`;
@@ -430,12 +537,21 @@ function updateStats() {
  * button (both while scanning and after a completed transfer). */
 function resetReceive() {
   done = false;
-  captureGen++;
-  stream?.getTracks().forEach((t) => t.stop());
-  clearInterval(statsTimer);
+  stopCapture();
   decoder = null;
-  sessionId = 0;
+  session = null;
+  for (const url of previewUrls) URL.revokeObjectURL(url);
+  previewUrls.clear();
+  captureTimes.length = 0;
+  decodeTimes.length = 0;
+  scanSamples.length = 0;
+  captureCount = 0;
+  busyDrops = 0;
+  frameId = 0;
+  progressDirty = false;
+  freshSinceRender = 0;
   pulseIdx = 0;
+  pulses.forEach((p) => p.classList.remove("active"));
   result.innerHTML = "";
   bar.style.width = "0%";
   progressPercent.textContent = "0%";
@@ -456,11 +572,11 @@ function resetReceive() {
 restartBtn.onclick = resetReceive;
 
 export function enterReceive() {
+  entered = true;
   resetReceive();
 }
 
 export function exitReceive() {
-  captureGen++;
-  stream?.getTracks().forEach((t) => t.stop());
-  clearInterval(statsTimer);
+  entered = false;
+  resetReceive();
 }

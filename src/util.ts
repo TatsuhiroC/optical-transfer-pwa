@@ -35,6 +35,7 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/svg+xml": "svg",
   "image/avif": "avif",
   "image/heic": "heic",
+  "image/heif": "heif",
   "image/bmp": "bmp",
   "video/mp4": "mp4",
   "video/quicktime": "mov",
@@ -55,7 +56,7 @@ const EXT_BY_MIME: Record<string, string> = {
 /** Best-effort MIME from the file extension; falls back to octet-stream. */
 export function guessMime(name: string): string {
   const ext = name.split(".").pop()?.toLowerCase();
-  return (ext && MIME_BY_EXT[ext]) || "application/octet-stream";
+  return ext && Object.hasOwn(MIME_BY_EXT, ext) ? MIME_BY_EXT[ext]! : "application/octet-stream";
 }
 
 /**
@@ -78,6 +79,14 @@ export function sniffMime(bytes: Uint8Array): string | null {
   if (bytes.length >= 6 && (ascii(0, "GIF87a") || ascii(0, "GIF89a"))) return "image/gif";
   if (bytes.length >= 12 && ascii(0, "RIFF") && ascii(8, "WEBP")) return "image/webp";
   if (bytes.length >= 12 && ascii(0, "RIFF") && ascii(8, "WAVE")) return "audio/wav";
+  if (bytes.length >= 12 && ascii(4, "ftyp")) {
+    if (ascii(8, "avif") || ascii(8, "avis")) return "image/avif";
+    if (["heic", "heix", "hevc", "hevx"].some((brand) => ascii(8, brand))) return "image/heic";
+    if (ascii(8, "mif1") || ascii(8, "msf1")) return "image/heif";
+    if (ascii(8, "M4A ") || ascii(8, "M4B ")) return "audio/mp4";
+    if (ascii(8, "qt  ")) return "video/quicktime";
+    if (["isom", "iso2", "mp41", "mp42", "avc1"].some((brand) => ascii(8, brand))) return "video/mp4";
+  }
   if (bytes.length >= 5 && ascii(0, "%PDF")) return "application/pdf";
   if (bytes.length >= 4 && ascii(0, "OggS")) return "audio/ogg";
   if (bytes.length >= 3 && ascii(0, "ID3")) return "audio/mpeg";
@@ -88,7 +97,7 @@ export function sniffMime(bytes: Uint8Array): string | null {
 }
 
 export function extForMime(mime: string | null): string {
-  return (mime && EXT_BY_MIME[mime]) || "bin";
+  return mime && Object.hasOwn(EXT_BY_MIME, mime) ? EXT_BY_MIME[mime]! : "bin";
 }
 
 /** True when the name ends in a plausible 1-5 char extension. */

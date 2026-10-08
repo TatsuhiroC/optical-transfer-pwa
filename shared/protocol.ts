@@ -34,6 +34,8 @@ export const NAME_MAX = NAME_FIELD_LEN - 1;
  * the receiver's bound on a per-frame buffer a crafted stream can request.
  */
 export const MAX_BLOCK_LEN = 2953 - HEADER_LEN;
+/** Practical app limit: decoding and native Base64 export also need working memory. */
+export const MAX_TRANSFER_BYTES = 64 * 1024 * 1024;
 const MAGIC0 = 0xd1;
 const MAGIC1 = 0x0c;
 
@@ -55,9 +57,14 @@ export interface FrameHeader {
 export function encodeName(name: string): Uint8Array {
   const enc = new TextEncoder().encode(name);
   if (enc.length <= NAME_MAX) return enc;
-  let end = NAME_MAX;
-  while (end > 0 && (enc[end]! & 0xc0) === 0x80) end--; // back off continuation bytes
-  return enc.subarray(0, end);
+  const suffix = /\.[a-z0-9]{1,10}$/i.exec(name)?.[0] ?? "";
+  const suffixBytes = new TextEncoder().encode(suffix);
+  let end = NAME_MAX - suffixBytes.length;
+  while (end > 0 && (enc[end]! & 0xc0) === 0x80) end--;
+  const truncated = new Uint8Array(end + suffixBytes.length);
+  truncated.set(enc.subarray(0, end));
+  truncated.set(suffixBytes, end);
+  return truncated;
 }
 
 export function packFrame(h: FrameHeader, block: Uint8Array, name?: string): Uint8Array {

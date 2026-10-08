@@ -45,13 +45,27 @@ describe("LT fountain code", () => {
     expect([...out]).toEqual([...data]);
   });
 
-  it("rebuilds across thousands of blocks at the densest frame", () => {
+  it("rebuilds across dozens of blocks at the densest frame", () => {
     const data = payload(200_000);
     const { out, frames, complete } = transfer(data, 2868); // 2953 B/frame preset
     expect(complete).toBe(true);
     expect(out.length).toBe(data.length);
     expect(fnv1a(out)).toBe(fnv1a(data));
     expect(frames).toBeLessThan(70 * 1.6); // k=70, ~1.18x overhead plus slack
+  });
+
+  it("rebuilds more than four thousand blocks with loss and shuffled batches", () => {
+    const data = payload(415 * 4096 - 7);
+    const enc = new LTEncoder(data, 415, 0x4321);
+    const dec = new LTDecoder(enc.k, 415, 0x4321, data.length);
+    for (let base = 0; base < enc.k * 4 && !dec.isComplete; base += 16) {
+      for (let offset = 15; offset >= 0 && !dec.isComplete; offset--) {
+        const seq = base + offset;
+        if (seq % 3 !== 0) dec.addFrame(seq, enc.encode(seq));
+      }
+    }
+    expect(dec.isComplete).toBe(true);
+    expect(dec.assemble()).toEqual(data);
   });
 
   it("pads and trims the tail block correctly", () => {

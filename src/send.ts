@@ -16,12 +16,15 @@ import {
   HEADER_LEN,
   NAME_FIELD_LEN,
   fnv1a,
+  MAX_TRANSFER_BYTES,
   packFrame,
   type FrameHeader,
 } from "../shared/protocol";
-import { store, type PendingFile } from "./store";
+import { setTransferActive, store } from "./store";
 import { guessMime } from "./util";
 import { t } from "./i18n";
+import { ScreenWakeLock } from "./wake-lock";
+import { FramePacer } from "./frame-pacer";
 
 const OVERHEAD_EST = 1.18; // expected frames ≈ K × this (robust-soliton ε)
 const MARGIN = 4; // quiet-zone modules
@@ -64,24 +67,44 @@ export function blockLenFor(frameBytes: number): number {
 let generation = 0; // bumped on stop/exit/clear; stale loops and timers die
 let pickSeq = 0; // guards against an older file resolve overwriting a newer pick
 let active = false;
+let entered = false;
+const wakeLock = new ScreenWakeLock();
+let animationFrame: number | undefined;
+let pumpTimer: number | undefined;
+let resizeHandler: (() => void) | undefined;
 let progressTimer: number | undefined;
 
+const FRAME_PRESETS = [500, 1000, 1465, 1850, 2331, 2953];
+const QR_CAPACITY = { L: 2953, M: 2331, Q: 1663, H: 1273 };
+function normalizeCapacity(): number {
+  const ecc = cfgEcc.value as keyof typeof QR_CAPACITY;
+  const capacity = QR_CAPACITY[ecc] ?? QR_CAPACITY.L;
+  for (const option of cfgBytes.options) option.disabled = Number(option.value) > capacity;
+  if (Number(cfgBytes.value) > capacity) {
+    cfgBytes.value = String(FRAME_PRESETS.filter((n) => n <= capacity).at(-1));
+  }
+  return Number(cfgBytes.value);
+}
+
 function loadFile(file: File) {
+  if (!entered) return;
+  haltStream();
   const pick = ++pickSeq;
+  const error = sizeError(file.size, file.name, blockLenFor(normalizeCapacity()));
+  if (error) { clearSelection(); specs.textContent = error; return; }
+  setTransferActive("send", true);
   void file.arrayBuffer().then((buf) => {
-    if (pick !== pickSeq) return; // superseded by a newer pick or a clear
+    if (pick !== pickSeq || !entered) return;
     const payload = new Uint8Array(buf);
-    if (payload.length === 0) {
-      // totalLen 0 has no valid frame header (parseFrame drops it), so the
-      // receiver would ignore every frame of this stream — say so here instead
-      // of playing a code no one can lock onto.
-      clearSelection();
-      specs.textContent = t("send.empty");
-      return;
-    }
+    const sizeIssue = sizeError(payload.length, file.name, blockLenFor(normalizeCapacity()));
+    if (sizeIssue) { clearSelection(); specs.textContent = sizeIssue; return; }
     store.pending = { payload, name: file.name, mime: file.type || guessMime(file.name) };
     showFileMeta();
-    void startStream();
+    startStream();
+  }).catch((err: unknown) => {
+    if (pick !== pickSeq || !entered) return;
+    setTransferActive("send", false);
+    specs.textContent = t("send.readErr", { msg: err instanceof Error ? err.message : String(err) });
   });
 }
 
@@ -96,7 +119,7 @@ function showFileMeta() {
 }
 
 function clearSelection() {
-  generation++;
+  haltStream();
   pickSeq++; // any in-flight file read is now stale
   active = false;
   store.pending = null;
@@ -110,14 +133,33 @@ function clearSelection() {
   clearInterval(progressTimer);
 }
 
-function sizeError(p: PendingFile, blockLen: number, k: number): string | null {
-  if (p.payload.length > 0xffffffff) return t("send.tooLarge");
-  if (k > 0xffff) return t("send.tooManyBlocks", { name: p.name, k });
+function sizeError(length: number, name: string, blockLen: number): string | null {
+  if (length === 0) return t("send.empty");
+  if (length > MAX_TRANSFER_BYTES) return t("send.memoryLimit");
+  const k = Math.ceil(length / blockLen);
+  if (k > 0xffff) return t("send.tooManyBlocks", { name, k });
   return null;
 }
 
-async function startStream() {
-  const gen = ++generation;
+function haltStream() {
+  generation++;
+  active = false;
+  stage.hidden = true;
+  btnStop.hidden = true;
+  btnResend.hidden = !store.pending;
+  clearInterval(progressTimer);
+  clearTimeout(pumpTimer);
+  if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
+  if (resizeHandler) window.removeEventListener("resize", resizeHandler);
+  resizeHandler = undefined;
+  wakeLock.setActive(false);
+  setTransferActive("send", false);
+}
+
+function startStream() {
+  haltStream();
+  const gen = generation;
+  if (!entered) return;
   const p = store.pending;
   if (!p) {
     specs.textContent = t("send.choose");
@@ -125,26 +167,19 @@ async function startStream() {
   }
   const payload = p.payload;
   const txFps = Number(cfgFps.value);
-  const frameBytes = Number(cfgBytes.value);
+  const frameBytes = normalizeCapacity();
   const ecc = cfgEcc.value as "L" | "M" | "Q" | "H";
   const displayPx = Number(cfgSize.value);
   const lanes = cfgLanes.value === "2" ? 2 : 1; // 1 = original single-code mode
   const blockLen = blockLenFor(frameBytes);
   const k = Math.ceil(payload.length / blockLen);
-  const tooBig = sizeError(p, blockLen, k);
+  const tooBig = sizeError(payload.length, p.name, blockLen);
   if (tooBig) {
     specs.textContent = tooBig;
     return;
   }
   if (gen !== generation) return; // superseded while checking
-  active = true;
-  btnStop.hidden = false;
-  btnResend.hidden = true;
-  stage.hidden = false;
-  txActions.hidden = false;
-  txProgress.hidden = false;
-
-  const sessionId = (Math.floor(Math.random() * 0xffff) + 1) & 0xffff;
+  const sessionId = crypto.getRandomValues(new Uint16Array(1))[0]!;
   const name = p.name; // packFrame truncates by bytes, on a code-point boundary
   const encoder = new LTEncoder(payload, blockLen, sessionId);
   const header: FrameHeader = {
@@ -164,6 +199,8 @@ async function startStream() {
   const queue: ImageData[] = [];
   let nextSeq = 0; // lane A seq (0…)
   let nextSeqB = 0; // lane B seq offset from LANE_OFFSET
+  let displayedCodes = 0;
+  const displayTimes: number[] = [];
 
   const sizeCanvas = () => {
     const dpr = window.devicePixelRatio || 1;
@@ -198,7 +235,7 @@ async function startStream() {
       const est = Math.ceil(k * OVERHEAD_EST);
       specs.textContent =
         `${p.name} · ${Math.round(payload.length / 1024)} KB · K=${k} · ~${est} frames · ` +
-        `~${Math.ceil(est / (txFps * lanes))} s @${txFps}fps×${lanes} · ${frameBytes} B/frame · ` +
+        `target ${txFps}fps×${lanes} · ${frameBytes} B/frame · ` +
         `V${version} · ECC ${ecc}`;
     }
     const size = qr.modules.size;
@@ -225,12 +262,27 @@ async function startStream() {
         if (lanes === 2) queue.push(makeFrame(LANE_OFFSET + nextSeqB++));
       }
     } catch (err) {
+      haltStream();
+      stage.hidden = true;
+      btnStop.hidden = true;
+      btnResend.hidden = false;
+      txActions.hidden = false;
       specs.textContent = t("send.genErr", { msg: err instanceof Error ? err.message : String(err) });
-      return;
     }
-    setTimeout(pump, 0);
   };
   pump();
+  if (gen !== generation) return;
+  active = true;
+  setTransferActive("send", true);
+  wakeLock.setActive(true);
+  btnStop.hidden = false;
+  btnResend.hidden = true;
+  stage.hidden = false;
+  txActions.hidden = false;
+  txProgress.hidden = false;
+  txProgress.textContent = "";
+  resizeHandler = sizeCanvas;
+  window.addEventListener("resize", resizeHandler);
 
   clearInterval(progressTimer);
   progressTimer = window.setInterval(() => {
@@ -239,19 +291,18 @@ async function startStream() {
       return;
     }
     const est = Math.ceil(k * OVERHEAD_EST);
-    txProgress.textContent = t("send.progress", { n: nextSeq + nextSeqB, m: est });
+    while (displayTimes.length && displayTimes[0]! < performance.now() - 2000) displayTimes.shift();
+    const span = displayTimes.length > 1 ? displayTimes.at(-1)! - displayTimes[0]! : 0;
+    const fps = span > 0 ? ((displayTimes.length - 1) * 1000 / span).toFixed(1) : "—";
+    txProgress.textContent = t("send.progress", { n: displayedCodes, m: est }) + " · " + t("send.actualFps", { fps });
   }, 500);
 
-  const interval = 1000 / txFps;
-  let nextAt = performance.now();
+  const pacer = new FramePacer(txFps);
   const tick = (now: number) => {
     if (gen !== generation) return;
-    requestAnimationFrame(tick);
-    if (now < nextAt) return;
-    if (queue.length < lanes) {
-      nextAt = now + interval;
-      return;
-    }
+    animationFrame = requestAnimationFrame(tick);
+    if (!pacer.due(now) || queue.length < lanes) return;
+    pumpTimer = window.setTimeout(pump, 0);
     const t = modules + 2 * MARGIN; // per-code pixel size in staging space
     const sctx = staging.getContext("2d")!;
     for (let l = 0; l < lanes; l++) {
@@ -261,27 +312,24 @@ async function startStream() {
     const ctx = canvas.getContext("2d")!;
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(staging, 0, 0, canvas.width, canvas.height);
-    nextAt += interval;
-    if (now - nextAt > 3 * interval) nextAt = now + interval; // fell behind — don't burst
+    pacer.displayed(now);
+    displayedCodes += lanes;
+    displayTimes.push(now);
   };
-  requestAnimationFrame(tick);
-  try {
-    await (navigator as Navigator & { wakeLock?: { request(t: "screen"): Promise<unknown> } })
-      .wakeLock?.request("screen");
-  } catch {
-    /* fine without it */
-  }
+  animationFrame = requestAnimationFrame(tick);
 }
 
 function stopStream() {
-  generation++;
-  active = false;
+  haltStream();
+  stage.hidden = true;
   btnStop.hidden = true;
   btnResend.hidden = false;
   txProgress.textContent = t("send.stopped");
 }
 
 export function enterSend() {
+  entered = true;
+  normalizeCapacity();
   if (store.pending && !active) {
     showFileMeta();
     void startStream();
@@ -289,8 +337,10 @@ export function enterSend() {
 }
 
 export function exitSend() {
-  generation++;
-  active = false;
+  entered = false;
+  pickSeq++;
+  haltStream();
+  stage.hidden = true;
 }
 
 // ---- wiring ----
@@ -327,6 +377,7 @@ dropzone.addEventListener("drop", (e) => {
 
 for (const el of [cfgFps, cfgBytes, cfgEcc, cfgSize, cfgLanes]) {
   el.addEventListener("change", () => {
+    normalizeCapacity();
     if (active && store.pending) void startStream();
   });
 }

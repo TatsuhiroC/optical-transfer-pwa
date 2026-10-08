@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generate the Android release keystore used to sign fend-offline APKs, then print the
+# Generate the Android release keystore used to sign optical-transfer-pwa APKs, then print the
 # four GitHub Secrets you have to add (Settings -> Secrets and variables -> Actions).
 #
 # Keep the generated .keystore file safe: every future APK must be signed with this same
@@ -7,12 +7,12 @@
 #
 # Usage:
 #   bash scripts/make-keystore.sh [path/to/release.keystore]
-#   KEY_ALIAS=fend ANDROID_KEYSTORE_PASSWORD=... bash scripts/make-keystore.sh
+#   KEY_ALIAS=optical-transfer ANDROID_KEYSTORE_PASSWORD=... bash scripts/make-keystore.sh
 
 set -euo pipefail
 
-KEYSTORE="${1:-$HOME/.fend-offline/release.keystore}"
-ALIAS="${KEY_ALIAS:-fend-offline}"
+KEYSTORE="${1:-$HOME/.optical-transfer-pwa/release.keystore}"
+ALIAS="${KEY_ALIAS:-optical-transfer-pwa}"
 DAYS="${VALIDITY_DAYS:-10000}"
 
 # macOS ships stub /usr/bin/keytool wrappers that fail unless a JDK is installed,
@@ -47,7 +47,7 @@ keytool -genkeypair \
 	-validity "$DAYS" \
 	-storepass "$PW" \
 	-keypass "$PW" \
-	-dname "CN=fend-offline, OU=personal, O=fend-offline, C=CN" \
+	-dname "CN=optical-transfer-pwa, OU=personal, O=optical-transfer-pwa, C=CN" \
 	> /dev/null
 
 B64="$(base64 < "$KEYSTORE" | tr -d '\n')"
@@ -72,10 +72,10 @@ $PW
 
 Or with the GitHub CLI (paste the values when prompted):
 
-  printf '%s' '$B64' | gh secret set ANDROID_KEYSTORE_BASE64 -R TatsuhiroC/fend-offline
-  gh secret set ANDROID_KEYSTORE_PASSWORD -R TatsuhiroC/fend-offline
-  gh secret set ANDROID_KEY_ALIAS -R TatsuhiroC/fend-offline
-  gh secret set ANDROID_KEY_PASSWORD -R TatsuhiroC/fend-offline
+  printf '%s' '$B64' | gh secret set ANDROID_KEYSTORE_BASE64 -R TatsuhiroC/optical-transfer-pwa
+  gh secret set ANDROID_KEYSTORE_PASSWORD -R TatsuhiroC/optical-transfer-pwa
+  gh secret set ANDROID_KEY_ALIAS -R TatsuhiroC/optical-transfer-pwa
+  gh secret set ANDROID_KEY_PASSWORD -R TatsuhiroC/optical-transfer-pwa
 
 Optional: pin the expected APK fingerprint so CI fails if signing ever changes:
 
