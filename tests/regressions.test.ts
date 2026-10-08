@@ -18,6 +18,7 @@ class Element {
   options = [500, 1000, 1465, 1850, 2331, 2953].map(n => ({ value: String(n), disabled: false }));
   events = new Map<string, () => void>();
   value = ''; children: Element[] = []; files: unknown[] = []; srcObject: unknown;
+  parentElement?: { clientWidth: number; getBoundingClientRect?: () => { top: number } };
   videoWidth = 0; videoHeight = 0; offsetWidth = 0;
   onclick: (() => unknown) | null = null; onchange: (() => unknown) | null = null;
   classList = { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() };
@@ -282,7 +283,7 @@ it('ECC changes constrain byte presets before starting a QR stream', async () =>
   el('file-input').files = [{ name: 'tiny.bin', type: '', size: 1, arrayBuffer: read }];
   el('file-input').onchange?.(); await settle();
   expect(el('stage').hidden).toBe(false);
-  expect(el('specs').textContent).toContain('ECC H');
+  expect(el('specs').textContent).toContain('error correction H');
   sender.exitSend();
 });
 
@@ -324,4 +325,70 @@ it('xcode UUID override remains compatible with its CommonJS v4 caller', async (
   const project = xcode.project('fixture.pbxproj');
   project.hash = { project: { objects: {} } };
   expect(project.generateUuid()).toMatch(/^[A-F0-9]{24}$/);
+});
+
+it("keeps received progress through a gap and language change, then verifies the file", async () => {
+  await receiver();
+  const payload = new Uint8Array([1, 2]);
+  const encoder = new LTEncoder(payload, 1, 1234);
+  const candidates = Array.from({ length: 100 }, (_, seq) => ({
+    seq,
+    data: encoder.encode(seq),
+  }));
+  const first = candidates.find((x) => x.data[0] === 1)!;
+  const second = candidates.find((x) => x.data[0] === 2)!;
+  const pack = (x: typeof first) =>
+    packFrame(
+      {
+        sessionId: 1234,
+        seq: x.seq,
+        k: 2,
+        blockLen: 1,
+        totalLen: 2,
+        payloadFnv: fnv1a(payload),
+      },
+      x.data,
+      "retained.bin",
+    );
+  FakeWorker.all[0]!.emit(pack(first));
+  vi.advanceTimersByTime(2000);
+  expect(el("rx-state").textContent).toBe("Waiting for new data");
+  const progress = el("bar").style.width;
+  const { setLang } = await import("../src/i18n");
+  setLang("zh");
+  expect(el("rx-state").textContent).toBe("等待新数据");
+  expect(el("bar").style.width).toBe(progress);
+  expect(el("result").children).toHaveLength(0);
+  FakeWorker.all[0]!.emit(pack(second));
+  expect(el("bar").style.width).toBe("100%");
+  expect(el("rx-state").textContent).toBe("校验通过");
+  expect(el("result").children.some((x) => x.textContent === "保存文件")).toBe(
+    true,
+  );
+});
+
+
+it('fits both optional QR lanes inside a narrow desktop panel without clipping', async () => {
+  Object.assign(window, { innerWidth: 1366, innerHeight: 768 });
+  el('stage').parentElement = { clientWidth: 342 };
+  el('cfg-lanes').value = '2';
+  const sender = await import('../src/send');
+  sender.enterSend();
+  el('file-input').files = [{ name: 'two-codes.bin', type: '', size: 1, arrayBuffer: async () => new Uint8Array([7]).buffer }];
+  el('file-input').onchange?.(); await settle();
+  expect(el('stage').hidden).toBe(false);
+  expect(parseFloat(el('qr').style.width!)).toBeLessThanOrEqual(338);
+  sender.exitSend();
+});
+
+
+it('keeps the code inside the available height of a landscape phone', async () => {
+  Object.assign(window, { innerWidth: 844, innerHeight: 390 });
+  el('stage').parentElement = { clientWidth: 432, getBoundingClientRect: () => ({ top: 160 }) };
+  const sender = await import('../src/send'); sender.enterSend();
+  el('file-input').files = [{ name: 'landscape.bin', type: '', size: 1, arrayBuffer: async () => new Uint8Array([9]).buffer }];
+  el('file-input').onchange?.(); await settle();
+  expect(el('stage').hidden).toBe(false);
+  expect(parseFloat(el('qr').style.height!) + 164).toBeLessThan(390);
+  sender.exitSend();
 });

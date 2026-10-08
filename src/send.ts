@@ -1,14 +1,4 @@
-// Send mode: pick a local file (or one handed over from a received transfer)
-// and stream it as an endless fountain-coded QR animation.
-//
-// Same pipeline as the original sender: mask pattern pinned (4x faster QR
-// generation), each frame shown for >= 2 refresh cycles, ECC L by default —
-// the fountain layer already turns corruption into erasures. On top of the
-// original this mode adds local file selection (any file, photo album, or
-// drag & drop), a file name field in every frame, size checks against the
-// protocol ceiling (k is u16 -> ~65535 blocks), a live frame/time estimate,
-// and a "remove file" (×) control so the picker stays visible and the user
-// can clear the selection and choose again. Exactly one file at a time.
+// File selection → pixel-aligned QR frames with bounded reads and stable pacing.
 
 import QRCode from "qrcode";
 import { LTEncoder } from "../shared/fountain";
@@ -22,11 +12,10 @@ import {
 } from "../shared/protocol";
 import { setTransferActive, store } from "./store";
 import { guessMime } from "./util";
-import { t } from "./i18n";
+import { setText } from "./i18n";
 import { ScreenWakeLock } from "./wake-lock";
 import { FramePacer } from "./frame-pacer";
 
-const OVERHEAD_EST = 1.18; // expected frames ≈ K × this (robust-soliton ε)
 const MARGIN = 4; // quiet-zone modules
 const LOOKAHEAD = 3;
 
@@ -79,7 +68,8 @@ const QR_CAPACITY = { L: 2953, M: 2331, Q: 1663, H: 1273 };
 function normalizeCapacity(): number {
   const ecc = cfgEcc.value as keyof typeof QR_CAPACITY;
   const capacity = QR_CAPACITY[ecc] ?? QR_CAPACITY.L;
-  for (const option of cfgBytes.options) option.disabled = Number(option.value) > capacity;
+  for (const option of cfgBytes.options)
+    option.disabled = Number(option.value) > capacity;
   if (Number(cfgBytes.value) > capacity) {
     cfgBytes.value = String(FRAME_PRESETS.filter((n) => n <= capacity).at(-1));
   }
@@ -90,32 +80,58 @@ function loadFile(file: File) {
   if (!entered) return;
   haltStream();
   const pick = ++pickSeq;
-  const error = sizeError(file.size, file.name, blockLenFor(normalizeCapacity()));
-  if (error) { clearSelection(); specs.textContent = error; return; }
+  const error = sizeError(
+    file.size,
+    file.name,
+    blockLenFor(normalizeCapacity()),
+  );
+  if (error) {
+    clearSelection();
+    setText(specs, error.key, error.vars);
+    return;
+  }
   setTransferActive("send", true);
-  void file.arrayBuffer().then((buf) => {
-    if (pick !== pickSeq || !entered) return;
-    const payload = new Uint8Array(buf);
-    const sizeIssue = sizeError(payload.length, file.name, blockLenFor(normalizeCapacity()));
-    if (sizeIssue) { clearSelection(); specs.textContent = sizeIssue; return; }
-    store.pending = { payload, name: file.name, mime: file.type || guessMime(file.name) };
-    showFileMeta();
-    startStream();
-  }).catch((err: unknown) => {
-    if (pick !== pickSeq || !entered) return;
-    setTransferActive("send", false);
-    specs.textContent = t("send.readErr", { msg: err instanceof Error ? err.message : String(err) });
-  });
+  void file
+    .arrayBuffer()
+    .then((buf) => {
+      if (pick !== pickSeq || !entered) return;
+      const payload = new Uint8Array(buf);
+      const sizeIssue = sizeError(
+        payload.length,
+        file.name,
+        blockLenFor(normalizeCapacity()),
+      );
+      if (sizeIssue) {
+        clearSelection();
+        setText(specs, sizeIssue.key, sizeIssue.vars);
+        return;
+      }
+      store.pending = {
+        payload,
+        name: file.name,
+        mime: file.type || guessMime(file.name),
+      };
+      showFileMeta();
+      startStream();
+    })
+    .catch((err: unknown) => {
+      if (pick !== pickSeq || !entered) return;
+      setTransferActive("send", false);
+      setText(specs, "send.readErr", {
+        msg: err instanceof Error ? err.message : String(err),
+      });
+    });
 }
 
 function showFileMeta() {
   const p = store.pending;
   if (!p) return;
   const kb = Math.max(1, Math.round(p.payload.length / 1024));
+  $("view-send").classList.add("has-file");
   dropzone.hidden = true; // the picker gives way to the picked file card
   fileMeta.hidden = false;
   fileClear.hidden = false;
-  fileMetaText.textContent = `${p.name} · ${kb} KB · ${p.mime}`;
+  fileMetaText.textContent = `${p.name} · ${kb} KB`;
 }
 
 function clearSelection() {
@@ -123,21 +139,27 @@ function clearSelection() {
   pickSeq++; // any in-flight file read is now stale
   active = false;
   store.pending = null;
+  $("view-send").classList.remove("has-file");
+  $("send-paused").hidden = true;
   dropzone.hidden = false; // the picker comes back
   fileMeta.hidden = true;
   stage.hidden = true;
   txActions.hidden = true;
   txProgress.hidden = true;
   txProgress.textContent = "";
-  specs.textContent = t("send.choose");
+  setText(specs, "send.choose");
   clearInterval(progressTimer);
 }
 
-function sizeError(length: number, name: string, blockLen: number): string | null {
-  if (length === 0) return t("send.empty");
-  if (length > MAX_TRANSFER_BYTES) return t("send.memoryLimit");
+function sizeError(
+  length: number,
+  name: string,
+  blockLen: number,
+): { key: string; vars?: Record<string, string | number> } | null {
+  if (length === 0) return { key: "send.empty" };
+  if (length > MAX_TRANSFER_BYTES) return { key: "send.memoryLimit" };
   const k = Math.ceil(length / blockLen);
-  if (k > 0xffff) return t("send.tooManyBlocks", { name, k });
+  if (k > 0xffff) return { key: "send.tooManyBlocks", vars: { name, k } };
   return null;
 }
 
@@ -145,6 +167,7 @@ function haltStream() {
   generation++;
   active = false;
   stage.hidden = true;
+  $("send-paused").hidden = !store.pending;
   btnStop.hidden = true;
   btnResend.hidden = !store.pending;
   clearInterval(progressTimer);
@@ -162,7 +185,7 @@ function startStream() {
   if (!entered) return;
   const p = store.pending;
   if (!p) {
-    specs.textContent = t("send.choose");
+    setText(specs, "send.choose");
     return;
   }
   const payload = p.payload;
@@ -172,10 +195,9 @@ function startStream() {
   const displayPx = Number(cfgSize.value);
   const lanes = cfgLanes.value === "2" ? 2 : 1; // 1 = original single-code mode
   const blockLen = blockLenFor(frameBytes);
-  const k = Math.ceil(payload.length / blockLen);
   const tooBig = sizeError(payload.length, p.name, blockLen);
   if (tooBig) {
-    specs.textContent = tooBig;
+    setText(specs, tooBig.key, tooBig.vars);
     return;
   }
   if (gen !== generation) return; // superseded while checking
@@ -207,11 +229,25 @@ function startStream() {
     const total = modules + 2 * MARGIN;
     const short = Math.min(window.innerWidth, window.innerHeight);
     const long = Math.max(window.innerWidth, window.innerHeight);
-    // Dual-lane keeps the SAME per-module size as single-code (identical
-    // decode margin); the long axis is halved so both codes fit on screen.
-    // With lanes = 1 the extra term is a no-op → layout is unchanged.
-    const cssBudget = Math.min(0.9 * short, displayPx, lanes > 1 ? (0.9 * long) / lanes : Infinity);
+    // Keep integer device pixels per module and preserve the QR quiet zone.
+    // Respect the responsive panel width for either one or two codes.
     stack = window.innerWidth <= window.innerHeight;
+    const parentWidth = stage.parentElement?.clientWidth;
+    const available = parentWidth
+      ? Math.max(1, (parentWidth - 4) / (stack ? 1 : lanes))
+      : 0.9 * short;
+    const parentTop = stage.parentElement?.getBoundingClientRect?.().top ?? 0;
+    const heightBudget = Math.max(
+      1,
+      (window.innerHeight - Math.max(0, parentTop) - 24) / (stack ? lanes : 1),
+    );
+    const cssBudget = Math.min(
+      heightBudget,
+      0.9 * short,
+      available,
+      displayPx,
+      lanes > 1 ? (0.9 * long) / lanes : Infinity,
+    );
     scale = Math.max(1, Math.floor((cssBudget * dpr) / total));
     staging.width = stack ? total : total * lanes;
     staging.height = stack ? total * lanes : total;
@@ -223,20 +259,19 @@ function startStream() {
 
   const makeFrame = (seq: number): ImageData => {
     const bytes = packFrame({ ...header, seq }, encoder.encode(seq), name);
-    const qr = QRCode.create([{ data: bytes, mode: "byte" } as unknown as QRCode.QRCodeSegment], {
-      errorCorrectionLevel: ecc,
-      version,
-      maskPattern: 4,
-    });
+    const qr = QRCode.create(
+      [{ data: bytes, mode: "byte" } as unknown as QRCode.QRCodeSegment],
+      {
+        errorCorrectionLevel: ecc,
+        version,
+        maskPattern: 4,
+      },
+    );
     if (version === undefined) {
       version = qr.version;
       modules = qr.modules.size;
       sizeCanvas();
-      const est = Math.ceil(k * OVERHEAD_EST);
-      specs.textContent =
-        `${p.name} · ${Math.round(payload.length / 1024)} KB · K=${k} · ~${est} frames · ` +
-        `target ${txFps}fps×${lanes} · ${frameBytes} B/frame · ` +
-        `V${version} · ECC ${ecc}`;
+      setText(specs, "ui.txSpecs", { lanes, fps: txFps, ecc });
     }
     const size = qr.modules.size;
     const data = qr.modules.data;
@@ -267,7 +302,9 @@ function startStream() {
       btnStop.hidden = true;
       btnResend.hidden = false;
       txActions.hidden = false;
-      specs.textContent = t("send.genErr", { msg: err instanceof Error ? err.message : String(err) });
+      setText(specs, "send.genErr", {
+        msg: err instanceof Error ? err.message : String(err),
+      });
     }
   };
   pump();
@@ -278,6 +315,7 @@ function startStream() {
   btnStop.hidden = false;
   btnResend.hidden = true;
   stage.hidden = false;
+  $("send-paused").hidden = true;
   txActions.hidden = false;
   txProgress.hidden = false;
   txProgress.textContent = "";
@@ -290,11 +328,13 @@ function startStream() {
       clearInterval(progressTimer);
       return;
     }
-    const est = Math.ceil(k * OVERHEAD_EST);
-    while (displayTimes.length && displayTimes[0]! < performance.now() - 2000) displayTimes.shift();
-    const span = displayTimes.length > 1 ? displayTimes.at(-1)! - displayTimes[0]! : 0;
-    const fps = span > 0 ? ((displayTimes.length - 1) * 1000 / span).toFixed(1) : "—";
-    txProgress.textContent = t("send.progress", { n: displayedCodes, m: est }) + " · " + t("send.actualFps", { fps });
+    while (displayTimes.length && displayTimes[0]! < performance.now() - 2000)
+      displayTimes.shift();
+    const span =
+      displayTimes.length > 1 ? displayTimes.at(-1)! - displayTimes[0]! : 0;
+    const fps =
+      span > 0 ? (((displayTimes.length - 1) * 1000) / span).toFixed(1) : "—";
+    setText(txProgress, "ui.txProgress", { n: displayedCodes, fps });
   }, 500);
 
   const pacer = new FramePacer(txFps);
@@ -322,9 +362,10 @@ function startStream() {
 function stopStream() {
   haltStream();
   stage.hidden = true;
+  $("send-paused").hidden = !store.pending;
   btnStop.hidden = true;
   btnResend.hidden = false;
-  txProgress.textContent = t("send.stopped");
+  setText(txProgress, "send.stopped");
 }
 
 export function enterSend() {

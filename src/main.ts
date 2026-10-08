@@ -14,10 +14,11 @@ const views = {
   send: $("view-send"),
   receive: $("view-receive"),
 };
+const navHome = $("nav-home");
 const navSend = $("nav-send");
 const navReceive = $("nav-receive");
 
-let current: keyof typeof views = "landing";
+let current: keyof typeof views | null = null;
 
 function show(name: keyof typeof views) {
   if (current === name) return;
@@ -25,10 +26,20 @@ function show(name: keyof typeof views) {
   if (current === "receive") exitReceive();
   current = name;
   for (const [k, v] of Object.entries(views)) v.hidden = k !== name;
+  navHome.classList.toggle("active", name === "landing");
+  for (const [link, role] of [
+    [navHome, "landing"],
+    [navSend, "send"],
+    [navReceive, "receive"],
+  ] as const) {
+    if (role === name) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
   navSend.classList.toggle("active", name === "send");
   navReceive.classList.toggle("active", name === "receive");
   if (name === "send") enterSend();
   if (name === "receive") enterReceive();
+  window.scrollTo({ top: 0, behavior: "instant" });
 }
 
 function route() {
