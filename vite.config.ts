@@ -15,7 +15,7 @@ export default defineConfig({
       // Registration happens in src/main.ts instead of an injected script: the
       // service worker must stay off inside the Capacitor build (see main.ts).
       injectRegister: null,
-      includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
+      includeAssets: ["icons/*.png", "icons/*.svg"],
       manifest: {
         name: "光码互传 · Optical Transfer",
         short_name: "光码互传",
@@ -28,6 +28,12 @@ export default defineConfig({
         icons: [
           { src: "./icons/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "./icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          {
+            src: "./icons/icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
         ],
       },
     }),

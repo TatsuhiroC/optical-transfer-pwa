@@ -1,60 +1,51 @@
-// App icons: the brand itself is a QR code, so the icon is one too —
-// orange field (the UI accent), dark modules. Run with `npm run icons`.
-//
-// Also emits the Android sources that scripts/android-assets.mjs consumes (legacy icon, adaptive foreground/background,
-// splash), because the Capacitor template would otherwise ship its own logo.
-import { mkdirSync, writeFileSync } from "node:fs";
-import QRCode from "qrcode";
+// One vector mark supplies PWA, Apple, Android and the in-app brand.
+// Keep the background full bleed; the OS applies its own launcher mask.
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import sharp from "sharp";
 
-const BRAND = "DECIMEN OPTICAL TRANSFER";
-const ACCENT = "#ffb257"; // the sender's code colour / UI accent
-const INK = "#121009"; // module colour, matches the app background
-const CLEAR = { r: 0, g: 0, b: 0, alpha: 0 }; // transparent, so the adaptive background shows through
+const root = new URL("../", import.meta.url);
+const mark = readFileSync(new URL("resources/brand-mark.svg", root), "utf8")
+  .replace(/<svg[^>]*>/, "")
+  .replace(/<\/svg>\s*$/, "");
+const background = `<defs>
+  <linearGradient id="tile" x1="40" y1="0" x2="470" y2="512" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#243045"/><stop offset=".55" stop-color="#121a28"/><stop offset="1" stop-color="#0b0e14"/>
+  </linearGradient>
+  <radialGradient id="warm" cx=".18" cy=".12" r=".85">
+    <stop stop-color="#ff777b" stop-opacity=".13"/><stop offset="1" stop-color="#ff777b" stop-opacity="0"/>
+  </radialGradient>
+</defs><path d="M0 0H512V512H0Z" fill="url(#tile)"/><path d="M0 0H512V512H0Z" fill="url(#warm)"/>`;
 
-const pwaDir = new URL("../public/icons/", import.meta.url);
-const androidDir = new URL("../resources/", import.meta.url);
-
-/**
- * A QR "photo": `margin` is in modules, so it also decides how much of the canvas
- * stays empty. qrcode rounds its canvas to whole modules, which can land a pixel
- * short of `size` — Android icons require exact squares, so pad it back with
- * nearest-neighbour (no resampling, the modules stay square).
- */
-const qrPng = async (size, margin, dark, light) => {
-  const png = await QRCode.toBuffer(BRAND, {
-    width: size,
-    margin,
-    errorCorrectionLevel: "M",
-    color: { dark, light },
-  });
-  return sharp(png)
-    .resize(size, size, { fit: "contain", kernel: "nearest", background: CLEAR })
-    .png()
-    .toBuffer();
-};
-
-const targets = {
-  "public/icons/icon-192.png": [pwaDir, await qrPng(192, 6, INK, ACCENT)],
-  "public/icons/icon-512.png": [pwaDir, await qrPng(512, 6, INK, ACCENT)],
-  // legacy launcher icon: full bleed, like the PWA icon
-  "resources/icon-only.png": [androidDir, await qrPng(1024, 8, INK, ACCENT)],
-  // adaptive icon: the dark QR floats on iconBackgroundColor, and the wider margin
-  // keeps it inside the mask's safe zone on every launcher shape
-  "resources/icon-foreground.png": [androidDir, await qrPng(1024, 12, INK, "#00000000")],
-  "resources/icon-background.png": [
-    androidDir,
-    await sharp({ create: { width: 1024, height: 1024, channels: 4, background: ACCENT } })
-      .png()
-      .toBuffer(),
-  ],
-  // splash: a small orange code on the dark background, both light and dark themes
-  "resources/splash.png": [androidDir, await qrPng(2732, 51, ACCENT, "#00000000")],
-  "resources/splash-dark.png": [androidDir, await qrPng(2732, 51, ACCENT, "#00000000")],
-};
-
-for (const [name, [dir, png]] of Object.entries(targets)) {
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(new URL(name.split("/").pop(), dir), png);
-  console.log(`${name} (${png.length} bytes)`);
+function svg(scale = 1.28, withBackground = true, monochrome = false) {
+  const artwork = monochrome
+    ? mark.replace(/url\(#(?:send|receive)\)|#fff5e9/g, "#ffffff")
+    : mark;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">${withBackground ? background : ""}<g transform="translate(256 256) scale(${scale}) translate(-256 -256)">${artwork}</g></svg>`;
 }
+async function png(path, size, artwork) {
+  const target = new URL(path, root);
+  mkdirSync(new URL(".", target), { recursive: true });
+  await sharp(Buffer.from(artwork))
+    .resize(size, size)
+    .png()
+    .toFile(target.pathname);
+  console.log(`${path} (${size} x ${size})`);
+}
+for (const size of [192, 512])
+  await png(`public/icons/icon-${size}.png`, size, svg());
+await png("public/icons/icon-maskable-512.png", 512, svg(1.18));
+await png("public/icons/apple-touch-icon.png", 180, svg());
+await png("public/icons/favicon-32.png", 32, svg());
+writeFileSync(new URL("public/icons/icon.svg", root), svg());
+await png("resources/icon-only.png", 1024, svg());
+// The mark fits inside Android's central 66/108 circle, including stroke edges.
+await png("resources/icon-foreground.png", 1024, svg(1.02, false));
+await png("resources/icon-monochrome.png", 1024, svg(1.02, false, true));
+await png(
+  "resources/icon-background.png",
+  1024,
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">${background}</svg>`,
+);
+// Splash artwork is transparent; Android's resource generator adds the dark field.
+for (const path of ["resources/splash.png", "resources/splash-dark.png"])
+  await png(path, 2732, svg(0.3, false));
