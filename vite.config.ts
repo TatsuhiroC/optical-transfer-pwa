@@ -15,7 +15,7 @@ export default defineConfig({
       // Registration happens in src/main.ts instead of an injected script: the
       // service worker must stay off inside the Capacitor build (see main.ts).
       injectRegister: null,
-      includeAssets: ["icons/*.png", "icons/*.svg"],
+      includeAssets: ["icons/*.png", "icons/*.svg", "apple-touch-icon*.png"],
       manifest: {
         name: "光码互传 · Optical Transfer",
         short_name: "光码互传",
