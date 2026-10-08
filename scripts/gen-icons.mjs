@@ -1,6 +1,7 @@
 // One vector mark supplies PWA, Apple, Android and the in-app brand.
 // Keep the background full bleed; the OS applies its own launcher mask.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import sharp from "sharp";
 
 const root = new URL("../", import.meta.url);
@@ -35,6 +36,29 @@ for (const size of [192, 512])
   await png(`public/icons/icon-${size}.png`, size, svg());
 await png("public/icons/icon-maskable-512.png", 512, svg(1.18));
 await png("public/icons/apple-touch-icon.png", 180, svg());
+// A new image gets a new URL so Safari need not reuse a cached Web Clip icon.
+// Keep conventional entry points too; never remove the previous icon URL.
+const appleIcon = await sharp(
+  new URL("public/icons/apple-touch-icon.png", root).pathname,
+)
+  .flatten({ background: "#0b0e14" })
+  .png()
+  .toBuffer();
+writeFileSync(new URL("public/icons/apple-touch-icon.png", root), appleIcon);
+const appleName = `apple-touch-icon-${createHash("sha256").update(appleIcon).digest("hex").slice(0, 12)}.png`;
+for (const name of [
+  appleName,
+  "apple-touch-icon.png",
+  "apple-touch-icon-precomposed.png",
+])
+  writeFileSync(new URL(`public/${name}`, root), appleIcon);
+const htmlPath = new URL("index.html", root);
+const html = readFileSync(htmlPath, "utf8");
+const appleLink =
+  /(<link\s+[^>]*\brel="apple-touch-icon"[^>]*\bhref=")[^"]+("[^>]*>)/;
+if (!appleLink.test(html))
+  throw new Error("Apple touch icon link missing from index.html");
+writeFileSync(htmlPath, html.replace(appleLink, `$1./${appleName}$2`));
 await png("public/icons/favicon-32.png", 32, svg());
 writeFileSync(new URL("public/icons/icon.svg", root), svg());
 await png("resources/icon-only.png", 1024, svg());
