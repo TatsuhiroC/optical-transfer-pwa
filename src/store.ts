@@ -8,3 +8,13 @@ export interface PendingFile {
 }
 
 export const store: { pending: PendingFile | null } = { pending: null };
+
+const activity = { send: false, receive: false };
+export const transferEvents = new EventTarget();
+export function setTransferActive(role: keyof typeof activity, active: boolean) {
+  activity[role] = active;
+  transferEvents.dispatchEvent(new Event("change"));
+}
+export function isTransferActive(): boolean {
+  return activity.send || activity.receive;
+}

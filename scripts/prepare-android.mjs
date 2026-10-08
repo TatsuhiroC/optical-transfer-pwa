@@ -49,33 +49,36 @@ const signingReady = Boolean(keystoreB64 && storePassword && keyAlias && keyPass
 
 // ---------------------------------------------------------------- version stamping
 function parseVersion(raw) {
-	const clean = (raw ?? '').trim().replace(/^v/i, '');
-	const match = /^(\d+)\.(\d+)\.(\d+)/.exec(clean);
-	return match ? { major: +match[1], minor: +match[2], patch: +match[3], clean } : null;
+  const clean = (raw ?? '').trim().replace(/^v/i, '');
+  return /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(clean) ? clean : null;
 }
-
 const refType = process.env.GITHUB_REF_TYPE ?? '';
 const refName = (process.env.GITHUB_REF_NAME ?? '').trim();
-const runNumber = Number.parseInt(process.env.GITHUB_RUN_NUMBER ?? '', 10);
+const run = process.env.GITHUB_RUN_NUMBER ?? '';
 const sha = (process.env.GITHUB_SHA ?? '').slice(0, 7);
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+if (refType === 'tag' && !parseVersion(refName)) fail('Tag must be a semantic version');
+if (refType === 'tag' && !signingReady) fail('Tagged releases require all four signing secrets');
+if ([keystoreB64, storePassword, keyAlias, keyPassword].some(Boolean) && !signingReady) fail('Incomplete signing secrets');
 
-let versionName;
+// One numbering scheme for both main and tags, with a migration offset above
+// previous semver-derived codes. Reruns keep the same code; new runs increase it.
 let versionCode;
-
-if (refType === 'tag' && parseVersion(refName)) {
-	const v = parseVersion(refName);
-	versionName = v.clean;
-	versionCode = v.major * 10000 + v.minor * 100 + v.patch; // 1.0.1 -> 10001
-} else if (parseVersion(pkg.version) && Number.isFinite(runNumber)) {
-	// main-branch builds: monotonically increasing, clearly below the tag scheme
-	const v = parseVersion(pkg.version);
-	versionName = `${v.clean}-dev.${runNumber}${sha ? `+${sha}` : ''}`;
-	versionCode = runNumber;
-} else {
-	versionName = undefined;
-	versionCode = undefined;
+const explicitCode = process.env.ANDROID_VERSION_CODE;
+if (explicitCode !== undefined) {
+  if (!/^[1-9]\d*$/.test(explicitCode)) fail('Invalid ANDROID_VERSION_CODE');
+  versionCode = Number(explicitCode);
+} else if (run) {
+  if (!/^[1-9]\d*$/.test(run)) fail('Invalid GITHUB_RUN_NUMBER');
+  versionCode = 100000000 + Number(run);
 }
+if (versionCode !== undefined && (!Number.isSafeInteger(versionCode) || versionCode > 2100000000)) {
+  fail('versionCode exceeds the Android limit');
+}
+const baseVersion = parseVersion(pkg.version);
+if (!baseVersion) fail('Invalid package version');
+const versionName = refType === 'tag' ? parseVersion(refName) :
+  `${baseVersion}-dev.${run || 'local'}${/^[0-9a-f]{7}$/.test(sha) ? `+${sha}` : ''}`;
 
 // ---------------------------------------------------------------- injected gradle
 const lines = [
@@ -90,14 +93,9 @@ const lines = [
 	'android {',
 ];
 
-if (versionCode !== undefined && versionName !== undefined) {
-	lines.push(
-		'    defaultConfig {',
-		`        versionCode ${versionCode}`,
-		`        versionName "${versionName}"`,
-		'    }'
-	);
-}
+lines.push('    defaultConfig {');
+if (versionCode !== undefined) lines.push(`        versionCode ${versionCode}`);
+lines.push(`        versionName "${versionName}"`, '    }');
 if (signingReady) {
 	lines.push(
 		'    signingConfigs {',
@@ -118,9 +116,14 @@ if (signingReady) {
 lines.push('}', MARKER, '');
 
 const gradle = readFileSync(gradlePath, 'utf8');
-if (!gradle.includes(MARKER)) {
-	writeFileSync(gradlePath, gradle.replace(/\s*$/, '\n') + lines.join('\n'));
+const from = gradle.indexOf(MARKER);
+let cleanGradle = gradle;
+if (from !== -1) {
+  const to = gradle.indexOf(MARKER, from + MARKER.length);
+  if (to === -1) fail('Incomplete previously injected Gradle block');
+  cleanGradle = gradle.slice(0, from) + gradle.slice(to + MARKER.length);
 }
+writeFileSync(gradlePath, cleanGradle.replace(/\s*$/, '\n') + lines.join('\n'));
 
 // ---------------------------------------------------------------- camera permission
 // Capacitor's WebChromeClient only grants the WebView's getUserMedia request when the
@@ -185,7 +188,7 @@ if (signingReady) {
 if (versionCode !== undefined) {
 	console.log(`[android] versionName=${versionName} versionCode=${versionCode}`);
 } else {
-	annotate('warning', 'Could not derive versionCode/versionName — the Capacitor template defaults will be used');
+	console.log(`[android] local build: versionName=${versionName}; template versionCode retained (set ANDROID_VERSION_CODE to override)`);
 }
 
 const apkPath = `${androidDir}/app/build/outputs/apk/${mode}/app-${mode}.apk`;

@@ -1,8 +1,7 @@
 // App icons: the brand itself is a QR code, so the icon is one too —
 // orange field (the UI accent), dark modules. Run with `npm run icons`.
 //
-// Also emits the Android sources that `npx @capacitor/assets generate --android
-// --assetPath resources` consumes (legacy icon, adaptive foreground/background,
+// Also emits the Android sources that scripts/android-assets.mjs consumes (legacy icon, adaptive foreground/background,
 // splash), because the Capacitor template would otherwise ship its own logo.
 import { mkdirSync, writeFileSync } from "node:fs";
 import QRCode from "qrcode";
@@ -19,7 +18,7 @@ const androidDir = new URL("../resources/", import.meta.url);
 /**
  * A QR "photo": `margin` is in modules, so it also decides how much of the canvas
  * stays empty. qrcode rounds its canvas to whole modules, which can land a pixel
- * short of `size` — `@capacitor/assets` wants exact squares, so pad it back with
+ * short of `size` — Android icons require exact squares, so pad it back with
  * nearest-neighbour (no resampling, the modules stay square).
  */
 const qrPng = async (size, margin, dark, light) => {

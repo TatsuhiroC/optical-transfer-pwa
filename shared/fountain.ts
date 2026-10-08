@@ -15,7 +15,7 @@
 // receiver) may differ by an ulp and silently desynchronize the streams.
 // dlog() below uses only exactly-specified IEEE-754 ops.
 
-import { splitmix32 } from "./protocol";
+import { headerReject, splitmix32 } from "./protocol";
 
 const LN2 = 0.6931471805599453;
 
@@ -148,12 +148,24 @@ interface PendingFrame {
   words: Uint32Array;
 }
 
+export class DecodeLimitError extends Error {
+  constructor() { super("Decoder resource budget exceeded"); }
+}
+
+export interface DecodeLimits {
+  maxFrames: number;
+  maxBytes: number;
+}
+
 export class LTDecoder {
   private readonly words: number;
   private readonly cdf: Float64Array;
   private readonly solved: (Uint32Array | null)[];
   private readonly byBlock = new Map<number, Set<PendingFrame>>();
   private readonly seen = new Set<number>();
+  private pendingWords = 0;
+  private pendingIndices = 0;
+  private readonly limits: DecodeLimits;
   solvedCount = 0;
   framesNew = 0;
   framesDup = 0;
@@ -163,10 +175,16 @@ export class LTDecoder {
     readonly blockLen: number,
     readonly sessionId: number,
     readonly totalLen: number,
+    limits?: Partial<DecodeLimits>,
   ) {
+    if (!Number.isInteger(k) || k > 65535 || k < 1 ||
+        !Number.isInteger(blockLen) || !Number.isInteger(totalLen) || headerReject({ k, blockLen, totalLen })) {
+      throw new RangeError("Invalid decoder dimensions");
+    }
     this.words = Math.ceil(blockLen / 4);
     this.cdf = solitonCdf(k);
     this.solved = new Array<Uint32Array | null>(k).fill(null);
+    this.limits = { maxFrames: Math.max(1024, k * 8), maxBytes: 128 * 1024 * 1024, ...limits };
   }
 
   get isComplete(): boolean {
@@ -174,10 +192,13 @@ export class LTDecoder {
   }
 
   addFrame(seq: number, block: Uint8Array): void {
+    if (block.length !== this.blockLen) throw new RangeError("Mismatched frame payload size");
     if (this.seen.has(seq)) {
       this.framesDup++;
       return;
     }
+    if (this.seen.size >= this.limits.maxFrames) throw new DecodeLimitError();
+    this.checkBudget(32);
     this.seen.add(seq);
     this.framesNew++;
     if (this.isComplete) return;
@@ -194,10 +215,14 @@ export class LTDecoder {
     }
     if (idx.size === 0) return; // fully redundant
     if (idx.size === 1) {
+      this.checkBudget(this.words * 4 + 32);
       this.resolve(idx.values().next().value!, words);
       return;
     }
+    this.checkBudget(this.words * 4 + 128 + idx.size * 80);
     const pf: PendingFrame = { idx, words };
+    this.pendingWords += this.words * 4 + 128;
+    this.pendingIndices += idx.size;
     for (const b of idx) {
       let set = this.byBlock.get(b);
       if (!set) {
@@ -206,6 +231,14 @@ export class LTDecoder {
       }
       set.add(pf);
     }
+  }
+
+  // Conservative accounting for typed payloads plus JS Set/Map memberships.
+  // This bounds the live graph, in addition to bounding distinct sequence IDs.
+  private checkBudget(extra: number) {
+    const used = this.k * 80 + this.seen.size * 32 +
+      this.solvedCount * (this.words * 4 + 32) + this.pendingWords + this.pendingIndices * 80;
+    if (used + extra > this.limits.maxBytes) throw new DecodeLimitError();
   }
 
   /** Peeling cascade: solve a block, reduce every frame waiting on it, repeat.
@@ -225,9 +258,12 @@ export class LTDecoder {
       for (const pf of waiting) {
         xorInto(pf.words, w);
         pf.idx.delete(b);
+        this.pendingIndices--;
         if (pf.idx.size === 1) {
           const r = pf.idx.values().next().value!;
           this.byBlock.get(r)?.delete(pf);
+          this.pendingIndices--;
+          this.pendingWords -= this.words * 4 + 128;
           if (!this.solved[r]) queue.push([r, pf.words]);
         }
       }

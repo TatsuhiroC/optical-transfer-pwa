@@ -129,11 +129,7 @@ APK 是用 [Capacitor](https://capacitorjs.com) 包住 `dist/`。Gradle 工程**
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # or: /opt/homebrew/opt/openjdk@21
 export ANDROID_HOME=$HOME/android-sdk              # needs platform-tools + platform 36
-npm run android:sync                               # build dist/ and cap sync
-npx cap add android                                # once, then npm run android:apk
-npx @capacitor/assets generate --android --assetPath resources \
-  --iconBackgroundColor '#ffb257' --iconBackgroundColorDark '#ffb257' \
-  --splashBackgroundColor '#121009' --splashBackgroundColorDark '#121009'
+npm run android:sync                               # build, create project if absent, prepare permissions/icons, sync
 npm run android:apk                                # → android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -156,7 +152,7 @@ included) and CI will refuse to publish an APK signed with anything else.
 
 Keep the keystore file itself backed up: if it is lost, existing installs can only
 be updated by uninstalling the app first. Without the secrets the workflow still
-runs, but falls back to a **debug** APK — every runner generates a fresh debug key,
+can produce a **debug** APK for branch builds — every runner generates a fresh debug key,
 so users have to uninstall before installing the next build.
 
 ---
@@ -168,23 +164,102 @@ APK 使用保存在 GitHub Secrets 里的 keystore 签名，因此新版本可�
 CI 就会拒绝发布用其他密钥签名的 APK。
 
 请务必备份 keystore 文件本身：一旦丢失，已安装的用户只能先卸载才能升级。没有配置这些
-secret 时 workflow 仍会运行，但会退回到 **debug** APK——每个 runner 都会重新生成一个
+secret 时分支构建会退回到 **debug** APK——每个 runner 都会重新生成一个
 debug 密钥，用户必须先卸载才能安装下一个版本。
 
 ### Protocol ceiling / 协议上限
 
-`k` (block count) is a u16 — max ~65535 blocks. At 1465 B/frame that caps
-files around **90 MB**; at the densest 2953 B/frame setting, ~190 MB. Larger
-selections are rejected with a hint to raise bytes/frame or pick a smaller
-file. `totalLen` is a u32 on the wire, but the receiver only accepts what `k`
-blocks can actually hold (`k = ceil(totalLen / blockLen)`), so a 4 GiB
-declaration is dropped instead of allocated.
+The app accepts files up to **64 MiB** (67,108,864 bytes), and checks the file
+size before reading it into memory. The protocol additionally caps `k` at 65535
+source blocks: the effective limit is the smaller of 64 MiB and
+`65535 * (bytes/frame - 85)`. Error correction constrains the frame capacity;
+unavailable byte presets are disabled and a lower valid preset is selected.
 
-`k`（分块数）是 u16，最多约 65535 块。按 1465 B/帧计算，文件上限约
-**90 MB**；用最密的 2953 B/帧设置约为 190 MB。超限时会被拒绝，并提示调大
-bytes/frame 或换小文件。`totalLen` 在协议里是 u32，但接收端只接受 `k` 个块
-真正装得下的长度（`k = ceil(totalLen / blockLen)`），因此声称 4 GiB 的流会
-被直接丢弃，而不是分配出来。
+本应用文件大小上限为 **64 MiB**（67,108,864 字节），读取文件前检查大小。
+协议还限制最多 65535 个源数据块，实际限制是 64 MiB 与
+`65535 * (每帧字节数 - 85)` 中较小的值。纠错等级会限制二维码容量，界面会禁用
+超过容量的字节数选项，并自动选取较小的有效值。
+
+The decoder has a conservative 128 MiB state budget and accepts at most
+`max(1024, 8*K)` distinct frames per session. These limits do not measure the
+browser's total heap: payload assembly, image preview and native export need
+additional working memory. A stalled transfer with no fresh frames for 60 seconds
+stops with a restart prompt. Frames in a session must agree on file geometry,
+checksum and file name. A checksum mismatch cannot be saved, shared or forwarded.
+
+解码状态采用保守的 128 MiB 内存预算，每个会话最多接收 `max(1024, 8*K)` 个不同帧。
+该预算不等于浏览器总内存，文件拼装、图片预览和原生导出仍需要额外工作空间。
+连续 60 秒没有新帧时停止并提示重试。同一会话的文件参数、摘要和名字必须一致；
+校验失败的文件不能保存、分享或转发。
+
+### Scanning and display cadence / 扫描与显示节奏
+
+The sender still defaults to **one QR code at 24 fps**. The 30 fps option is
+available for device pairs that can receive it reliably; raising the default
+requires physical phone tests. Each code is kept for at least two animation
+callbacks, and long rendering delays restart the schedule instead of flashing
+through overdue codes. Faster selections are thus bounded by the actual browser
+callback rate. The sender reports codes actually displayed and measured display
+fps, rather than counting the lookahead queue or promising an ideal duration.
+
+发送端仍默认 **单二维码、24 fps**。设备组合能稳定识别时可手动选择 30 fps；
+提高默认值需要手机实拍验证。每码至少间隔两个绘制回调，长时间卡顿后重新安排
+节奏，避免追赶旧进度时快速闪码。实际显示速度还受到浏览器回调频率限制。
+发送计数按实际显示计算，并显示实测帧率，预生成队列不再算作已经发送。
+
+Receiver workers automatically track the last valid transfer QR's position at
+original pixel resolution. They retain ZXing's robust search defaults and full
+capture buffers: a missed/incomplete local scan retries the **same full capture**.
+Each worker also searches the full image every eight jobs or after 500 ms,
+whichever comes first on the next job, to discover movement and additional codes.
+Repeated tracking failures cause a 500 ms backoff to full-image scanning.
+Disable **Auto-track light codes** in camera settings to compare with the original
+full-image scanner. Progress renders at 5 Hz; duplicates do not redraw progress.
+New metrics show recent average scan time and the percentage of available camera
+frames skipped while all workers were busy (including warmup).
+
+接收线程会追踪合法光码的位置，按原像素清晰度扫描附近区域，并保留稳健识别选项。
+局部扫描失败或识别数量减少时，用 **同一张完整画面** 重试。每个线程每八次扫描，
+或距离上次全图扫描超过 500 毫秒时，在下一次任务重新搜索全图。连续失败后暂时
+使用全图扫描 500 毫秒。摄像头设置中可关闭“自动追踪光码”，用于对照原来的扫描方式。
+进度每秒更新五次，重复帧不重绘进度；新增识别耗时与忙碌时跳过画面的比例，后者包含启动阶段。
+
+The wire format, QR error correction, fountain algorithm and final file checksum
+are unchanged. Synthetic QR/WASM and browser worker checks cover movement, loss,
+rotation and recovery; they do not establish screen-camera throughput or exposure
+tolerance on real phones. More stable software pacing cannot infer the remote
+camera's exposure or automatically choose its best sending rate.
+
+传输格式、二维码纠错、喷泉编码和最终文件校验保持兼容。合成二维码与浏览器线程
+验证覆盖了移动、丢帧、旋转和恢复，但手机上的速度与曝光容忍度仍需实拍确认。
+稳定显示节奏无法代替接收端反馈，也不能自动判断另一台手机最适合的发送帧率。
+
+### Updates, signing and version codes / 更新、签名与版本号
+
+Web updates are shown as an explicit update button; active transfers prevent
+refreshing. Updating clears the current in-memory files, as stated on the button.
+Android sharing uses a temporary cache file and retains its `file://` URI.
+
+网页新版本需要点击更新按钮，传输过程中不能刷新；更新会清除当前内存中的文件，
+按钮会明确说明。Android 分享使用临时缓存文件，并保留 `file://` 地址。
+
+Tagged releases require all four signing secrets and fail instead of publishing
+a debug-signed APK. Both branch and tag builds use `100000000 + GITHUB_RUN_NUMBER`
+as `versionCode`, preserving an increasing sequence above earlier version codes.
+Local builds may set `ANDROID_VERSION_CODE` explicitly. Regenerating the project
+updates the injected configuration rather than leaving stale signing/version data.
+Keep the signing key used by previously published APKs.
+
+正式版本标签构建必须有四个签名 Secret，否则失败；不会发布临时 debug 密钥签名的正式包。
+分支和标签统一使用 `100000000 + GITHUB_RUN_NUMBER`，避免开发版和正式版升级时版本号倒退。
+本地构建可显式设置 `ANDROID_VERSION_CODE`。重复准备工程会更新版本和签名配置。
+请保留之前已发布 APK 的签名密钥。
+
+File data is transmitted in plaintext over the optical channel. FNV detects
+accidental corruption; it does not authenticate the sender. This application does
+not currently encrypt files.
+
+文件通过光学通道明文传输，FNV 检测偶然的数据错误，不能认证发送者身份。目前未加密文件。
 
 ## Deploy / 部署
 

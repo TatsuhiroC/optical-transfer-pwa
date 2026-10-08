@@ -3,7 +3,7 @@
 // show codes and film them, so entering a mode exits the other.
 
 import { Capacitor } from "@capacitor/core";
-import { registerSW } from "virtual:pwa-register";
+import { initUpdates } from "./updates";
 import { enterSend, exitSend } from "./send";
 import { enterReceive, exitReceive } from "./receive";
 import { initI18n } from "./i18n";
@@ -62,5 +62,5 @@ if (Capacitor.isNativePlatform()) {
     // serves the APK's own assets.
   });
 } else {
-  registerSW({ immediate: true });
+  initUpdates();
 }

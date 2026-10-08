@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [
     basicSsl(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       // Registration happens in src/main.ts instead of an injected script: the
       // service worker must stay off inside the Capacitor build (see main.ts).
       injectRegister: null,

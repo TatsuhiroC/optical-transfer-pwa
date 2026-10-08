@@ -19,6 +19,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -130,7 +134,10 @@ button {
   color: #fff;
   background: linear-gradient(135deg, var(--accent), #ff794e);
   box-shadow: 0 12px 35px #ff5b7140;
-  font: 700 16px/1.2 inherit;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
   cursor: pointer;
 }
 button.ghost,
@@ -142,7 +149,10 @@ button.small {
   color: var(--text);
   background: var(--panel);
   box-shadow: none;
-  font: 600 14px/1.2 inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 .actions {
   display: flex;
@@ -526,7 +536,10 @@ video.received {
   background: linear-gradient(135deg, var(--accent), #ff794e);
   text-align: center;
   text-decoration: none;
-  font: 700 16px/1.2 inherit;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
   cursor: pointer;
 }
 .secondary-button {
@@ -541,7 +554,10 @@ video.received {
   background: var(--panel);
   text-align: center;
   text-decoration: none;
-  font: 600 15px/1.2 inherit;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
 }
 

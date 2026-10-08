@@ -146,7 +146,9 @@ describe("encodeName", () => {
       // a strict decoder throws if the cut landed inside a sequence
       const decoded = new TextDecoder("utf-8", { fatal: true }).decode(enc);
       expect(decoded).not.toContain("\uFFFD");
-      expect(name.startsWith(decoded)).toBe(true);
+      const extension = name.slice(name.lastIndexOf("."));
+      expect(decoded.endsWith(extension)).toBe(true);
+      expect(name.startsWith(decoded.slice(0, -extension.length))).toBe(true);
       expect(parseFrame(packFrame(headerFor(1, 64, 64), block, name))?.name).toBe(decoded);
     }
   });

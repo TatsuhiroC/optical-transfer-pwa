@@ -5,6 +5,7 @@
 
 import wasmUrl from "zxing-wasm/reader/zxing_reader.wasm?url";
 import { prepareZXingModule, readBarcodes } from "zxing-wasm/reader";
+import { AdaptiveQRScanner } from "./qr-scanner";
 
 prepareZXingModule({
   overrides: {
@@ -18,21 +19,24 @@ const ctx = self as unknown as {
   postMessage(msg: unknown, transfer?: Transferable[]): void;
 };
 
+const scanner = new AdaptiveQRScanner(readBarcodes);
+
 ctx.onmessage = async (e: MessageEvent) => {
-  const { id, buf, w, h } = e.data as { id: number; buf: ArrayBuffer; w: number; h: number };
+  const { id, buf, w, h, track } = e.data as { id: number; buf: ArrayBuffer; w: number; h: number; track?: boolean };
+  const started = performance.now();
   try {
     const img = new ImageData(new Uint8ClampedArray(buf), w, h);
     // Dual-lane senders show two codes per screen refresh; decode both and
     // hand every one to the main thread (the fountain decoder dedups by
     // seq, so feeding both lanes into one decoder is safe). Single-code
     // streams simply yield a one-element list.
-    const results = await readBarcodes(img, { formats: ["QRCode"], maxNumberOfSymbols: 2 });
+    const results = await scanner.scan(img, track !== false);
     const found = results.filter((x) => x.isValid && x.bytes.length > 0).map((x) => x.bytes);
-    ctx.postMessage({ id, bytes: found });
+    ctx.postMessage({ id, bytes: found, scanMs: performance.now() - started });
   } catch {
     // No code in this frame (blur, glare, half a symbol) is the common case —
     // report it as an empty result, never as a missing message.
-    ctx.postMessage({ id, bytes: null });
+    ctx.postMessage({ id, bytes: null, scanMs: performance.now() - started });
   }
 };
 
