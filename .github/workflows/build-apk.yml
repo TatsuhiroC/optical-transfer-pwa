@@ -107,11 +107,23 @@ jobs:
           "$BUILD_TOOLS/aapt2" dump permissions "$APK" | grep -F 'android.permission.CAMERA' ||
             { echo "::error::Missing camera permission"; exit 1; }
 
+      - name: Name APK with its app version
+        id: named_apk
+        env:
+          APK_SOURCE: ${{ steps.signing.outputs.apk_path }}
+          APK_VERSION: ${{ steps.signing.outputs.version_name }}
+          APK_MODE: ${{ steps.signing.outputs.mode }}
+        run: |
+          set -euo pipefail
+          ASSET="optical-transfer-${APK_VERSION}-${APK_MODE}.apk"
+          cp "$APK_SOURCE" "$ASSET"
+          echo "path=$ASSET" >> "$GITHUB_OUTPUT"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
           name: optical-transfer-${{ steps.signing.outputs.mode }}-apk
-          path: ${{ steps.signing.outputs.apk_path }}
+          path: ${{ steps.named_apk.outputs.path }}
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
@@ -132,7 +144,7 @@ jobs:
         run: |
           set -euo pipefail
           ASSET="optical-transfer-${VERSION}.apk"
-          cp release-apk/app-release.apk "$ASSET"
+          cp "release-apk/optical-transfer-${VERSION}-release.apk" "$ASSET"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "$ASSET" --clobber
           else

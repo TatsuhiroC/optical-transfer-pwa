@@ -106,6 +106,13 @@ Two installed copies of the same PWA (one in each role) work fully offline.
 
 ## Android APK / 安卓安装包
 
+The current app version series is **2.0.0**. APK filenames include the embedded
+app version and signing mode, such as `optical-transfer-2.0.0-dev.7+abcdef0-debug.apk`
+for an Actions build or `optical-transfer-2.0.0.apk` for a signed tagged release.
+
+当前应用版本从 **2.0.0** 开始。APK 文件名包含实际应用版本与签名类型；
+Actions 测试包保留 `dev` 和 `debug` 标识，正式标签发布为 `optical-transfer-2.0.0.apk`。
+
 Download the latest APK from [Releases](https://github.com/TatsuhiroC/optical-transfer-pwa/releases)
 (or `Actions → Build Android APK → Artifacts` for a dev build) and install it —
 the web bundle, WASM and icons are all inside the APK, so the app never needs a
