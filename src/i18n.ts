@@ -124,8 +124,8 @@ const zh: Dict = {
   "nav.send": "发送",
   "nav.receive": "接收",
   "lang.toggle": "EN",
-  "landing.title": "光码互传",
-  "landing.subtitle": "一个应用，两种角色——文件化作光传输。不联网、不配对。",
+  "landing.title": "Optical Transfer",
+  "landing.subtitle": "一个应用，两种角色——文件以光互传。不联网、不配对。",
   "landing.hint1": "两台设备装同一应用：一台发送、一台接收——屏幕对镜头。",
   "landing.send": "发送文件",
   "landing.receive": "接收",
@@ -300,7 +300,7 @@ function applyStatic() {
   }
   document.title =
     lang === "zh"
-      ? "光传输 — 喷泉码二维码文件传输"
+      ? "Optical Transfer · 光码互传 — 喷泉码二维码文件传输"
       : "Optical Transfer — fountain QR file transfer";
   for (const btn of document.querySelectorAll(".js-lang-btn")) {
     btn.textContent = t("lang.toggle");

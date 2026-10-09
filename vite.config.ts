@@ -17,8 +17,8 @@ export default defineConfig({
       injectRegister: null,
       includeAssets: ["icons/*.png", "icons/*.svg", "apple-touch-icon*.png"],
       manifest: {
-        name: "光码互传 · Optical Transfer",
-        short_name: "光码互传",
+        name: "Optical Transfer",
+        short_name: "Optical Transfer",
         description:
           "Send files between devices as fountain-coded animated QR codes — screen to camera, no network path.",
         theme_color: "#0b0e14",
