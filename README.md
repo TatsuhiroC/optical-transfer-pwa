@@ -106,12 +106,12 @@ Two installed copies of the same PWA (one in each role) work fully offline.
 
 ## Android APK / 安卓安装包
 
-The current app version is **2.0.2**. APK filenames include the embedded
-app version and signing mode, such as `optical-transfer-2.0.2-dev.9+abcdef0-release.apk`
-for an Actions build or `optical-transfer-2.0.2.apk` for a signed tagged release.
+The current app version is **2.0.3**. APK filenames include the embedded
+app version and signing mode, such as `optical-transfer-2.0.3-dev.9+abcdef0-release.apk`
+for an Actions build or `optical-transfer-2.0.3.apk` for a signed tagged release.
 
-当前应用版本为 **2.0.2**。APK 文件名包含实际应用版本与签名类型；
-Actions 开发包保留 `dev` 标识，正式标签发布为 `optical-transfer-2.0.2.apk`。
+当前应用版本为 **2.0.3**。APK 文件名包含实际应用版本与签名类型；
+Actions 开发包保留 `dev` 标识，正式标签发布为 `optical-transfer-2.0.3.apk`。
 
 Icons share the vector source `resources/brand-mark.svg`. Run `npm run icons` to
 regenerate PWA, Apple touch, Android adaptive and monochrome icons. Existing home
