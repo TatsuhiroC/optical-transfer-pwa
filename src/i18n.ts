@@ -20,6 +20,13 @@ const en: Dict = {
     "Two devices run the same app: one sends, one receives — screen to camera.",
   "landing.send": "Send a file",
   "landing.receive": "Receive",
+  "invite.button": "Invite",
+  "invite.title": "Invite a companion",
+  "invite.description": "Have them scan this code to open the same home page.",
+  "invite.close": "Close",
+  "invite.loading": "Preparing the QR code…",
+  "invite.error": "Could not create the code. Open the link below instead.",
+  "invite.network": "Internet is needed for the first visit.",
 
   "send.title": "Choose a photo, or a file.",
   "send.subtitle": "Have the other phone point its camera at your screen.",
@@ -120,6 +127,13 @@ const en: Dict = {
 
 const zh: Dict = {
   ...uiZh,
+  "invite.button": "扫码邀请",
+  "invite.title": "邀请同伴",
+  "invite.description": "让同伴扫码，打开同一个首页。",
+  "invite.close": "关闭",
+  "invite.loading": "正在生成二维码…",
+  "invite.error": "二维码生成失败，请使用下方网址。",
+  "invite.network": "首次打开需要网络。",
   "nav.home": "首页",
   "nav.send": "发送",
   "nav.receive": "接收",

@@ -7,6 +7,7 @@ import { initUpdates } from "./updates";
 import { enterSend, exitSend } from "./send";
 import { enterReceive, exitReceive } from "./receive";
 import { initI18n } from "./i18n";
+import { initInvite, closeInvite } from "./invite";
 
 const $ = (id: string) => document.getElementById(id)!;
 const views = {
@@ -25,6 +26,7 @@ function show(name: keyof typeof views) {
   if (current === "send") exitSend();
   if (current === "receive") exitReceive();
   current = name;
+  if (name !== "landing") closeInvite();
   for (const [k, v] of Object.entries(views)) v.hidden = k !== name;
   navHome.classList.toggle("active", name === "landing");
   for (const [link, role] of [
@@ -57,6 +59,7 @@ $("btn-receive").onclick = () => {
   location.hash = "#/receive";
 };
 initI18n();
+initInvite();
 route();
 
 // The service worker is a web-only concern. Inside the Android shell every asset
