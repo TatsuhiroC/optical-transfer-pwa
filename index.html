@@ -251,11 +251,27 @@
               >
             </button>
           </div>
-          <p class="home-hint">
-            <span data-i18n="ui.openOpticalTransferOnBothDevices"
-              >两台设备都打开 Optical Transfer，即可开始。</span
+          <div class="home-invite">
+            <p class="home-hint">
+              <span data-i18n="ui.openOpticalTransferOnBothDevices"
+                >两台设备都打开 Optical Transfer，即可开始。</span
+              >
+            </p>
+            <button
+              type="button"
+              class="invite-button"
+              id="invite-button"
+              aria-haspopup="dialog"
+              aria-controls="invite-dialog"
             >
-          </p>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M3 3h6v6H3zm12 0h6v6h-6zM3 15h6v6H3zm12 0h3v3h-3zm3 3h3v3h-3zM12 3v6m-9 3h6m3 0h3m3 0h3m-9 3v6"
+                />
+              </svg>
+              <span data-i18n="invite.button">扫码邀请</span>
+            </button>
+          </div>
         </section>
         <section id="view-send" class="view" hidden>
           <div class="send-layout">
@@ -664,6 +680,43 @@
         </details>
       </footer>
     </div>
+    <dialog
+      id="invite-dialog"
+      class="invite-dialog"
+      aria-labelledby="invite-title"
+      aria-describedby="invite-description"
+    >
+      <button
+        type="button"
+        id="invite-close"
+        class="invite-close"
+        aria-label="关闭"
+        data-i18n-aria-label="invite.close"
+        autofocus
+      >
+        ×
+      </button>
+      <p class="invite-eyebrow">OPTICAL TRANSFER</p>
+      <h2 id="invite-title" data-i18n="invite.title">邀请同伴</h2>
+      <p id="invite-description" data-i18n="invite.description">
+        让同伴扫码，打开同一个首页。
+      </p>
+      <div class="invite-code">
+        <img id="invite-qr" alt="" hidden />
+        <p id="invite-status" role="status" data-i18n="invite.loading">
+          正在生成二维码…
+        </p>
+      </div>
+      <a
+        id="invite-url"
+        class="invite-url"
+        target="_blank"
+        rel="noopener noreferrer"
+      ></a>
+      <p class="invite-network-note" data-i18n="invite.network">
+        首次打开需要网络。
+      </p>
+    </dialog>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>
