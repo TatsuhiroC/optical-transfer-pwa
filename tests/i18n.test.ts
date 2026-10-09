@@ -4,10 +4,11 @@ it("changing language updates labels without erasing runtime status", async () =
   vi.resetModules();
   const status = { textContent: "", getAttribute: () => "receive.stats" };
   const label = { textContent: "", getAttribute: () => "nav.send" };
+  const brand = { textContent: "", getAttribute: () => "landing.title" };
   vi.stubGlobal("document", {
     documentElement: {},
     querySelectorAll: (selector: string) =>
-      selector === "[data-i18n]" ? [status, label] : [],
+      selector === "[data-i18n]" ? [status, label, brand] : [],
   });
   vi.stubGlobal("navigator", { language: "en" });
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: vi.fn() });
@@ -17,6 +18,11 @@ it("changing language updates labels without erasing runtime status", async () =
   setLang("zh");
   expect(label.textContent).toBe("发送");
   expect(status.textContent).toBe("verification failed");
+  expect(brand.textContent).toBe("Optical Transfer");
+  expect(document.title).toContain("光码互传");
+  setLang("en");
+  expect(brand.textContent).toBe("Optical Transfer");
+  expect(document.title).toBe("Optical Transfer — fountain QR file transfer");
   vi.unstubAllGlobals();
 });
 
