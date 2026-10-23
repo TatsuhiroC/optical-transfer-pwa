@@ -76,7 +76,7 @@ for (const [density, scale] of Object.entries(densities)) {
       h * scale,
     );
     await image(
-      "splash-dark.png",
+      "splash.png",
       `drawable-${orientation}-night-${density}`,
       "splash.png",
       w * scale,
@@ -85,7 +85,7 @@ for (const [density, scale] of Object.entries(densities)) {
   }
 }
 await image("splash.png", "drawable", "splash.png", 320, 480);
-await image("splash-dark.png", "drawable-night", "splash.png", 320, 480);
+await image("splash.png", "drawable-night", "splash.png", 320, 480);
 const adaptive = join(res, "mipmap-anydpi-v26");
 await mkdir(adaptive, { recursive: true });
 const xml = `<?xml version="1.0" encoding="utf-8"?>

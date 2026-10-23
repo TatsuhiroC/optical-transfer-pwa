@@ -14,9 +14,14 @@ vi.mock('@capacitor/filesystem', () => ({ Directory: { Documents: 'DOCUMENTS', C
 vi.mock('@capacitor/share', () => ({ Share: { share: bridge.share } }));
 
 class Element {
+  className = ''; id = ''; readOnly = false;
   textContent = ''; style: Record<string, string> = {}; hidden = false; disabled = false;
   options = [500, 1000, 1465, 1850, 2331, 2953].map(n => ({ value: String(n), disabled: false }));
-  events = new Map<string, () => void>();
+  events = new Map<string, (event?: unknown) => unknown>();
+  attributes = new Map<string, string>();
+  setAttribute(name: string, value: string) { this.attributes.set(name, value); }
+  getAttribute(name: string) { return this.attributes.get(name) ?? null; }
+  focus = vi.fn(); select = vi.fn();
   value = ''; children: Element[] = []; files: unknown[] = []; srcObject: unknown;
   parentElement?: { clientWidth: number; getBoundingClientRect?: () => { top: number } };
   videoWidth = 0; videoHeight = 0; offsetWidth = 0;
@@ -25,7 +30,7 @@ class Element {
   append(e: Element) { this.children.push(e); }
   querySelector() { return this; }
   querySelectorAll() { return []; }
-  addEventListener(name: string, cb: () => void) { this.events.set(name, cb); }
+  addEventListener(name: string, cb: (event?: unknown) => unknown) { this.events.set(name, cb); }
   getContext() { return { putImageData: vi.fn(), drawImage: vi.fn() }; }
   play() { return Promise.resolve(); }
   click() { return this.onclick?.(); }
@@ -394,5 +399,156 @@ it('keeps the code inside the available height of a landscape phone', async () =
   el('file-input').onchange?.(); await settle();
   expect(el('stage').hidden).toBe(false);
   expect(parseFloat(el('qr').style.height!) + 164).toBeLessThan(390);
+  sender.exitSend();
+});
+
+it.each(['wallet.sqlite','map.geojson','slides.keynote','.gitignore','file.custom-type','file.数据'])('preserves %s through native saving and forwarding', async name => {
+  bridge.native=true;await receiver();FakeWorker.all[0]!.emit(frame(undefined,undefined,name));
+  el('result').children.find(x=>x.textContent==='Save file')!.click();await settle();
+  expect(bridge.write).toHaveBeenCalledWith(expect.objectContaining({path:name}));
+  el('result').children.at(-1)!.click();const {store}=await import('../src/store');expect(store.pending!.name).toBe(name);
+});
+it('translates the whole completed summary and does not report infinite throughput', async () => {
+  await receiver();FakeWorker.all[0]!.emit(frame());
+  expect(el('stats').textContent).not.toContain('Infinity');expect(el('stats').textContent).toContain('— KB/s');
+  const {setLang}=await import('../src/i18n');setLang('zh');
+  expect(el('stats').textContent).toContain('哈希校验通过');expect(el('stats').textContent).not.toContain('verified');
+});
+it('does not construct web Files on Android or browsers without file sharing', async () => {
+  const makeFile=vi.fn();vi.stubGlobal('File',makeFile);bridge.native=true;
+  const receive=await receiver();FakeWorker.all[0]!.emit(frame());expect(makeFile).not.toHaveBeenCalled();
+  receive.exitReceive();bridge.native=false;await receiver();FakeWorker.all.at(-1)!.emit(frame());expect(makeFile).not.toHaveBeenCalled();
+});
+it('keeps save and forward actions if the browser file-sharing probe throws', async () => {
+  Object.assign(navigator,{share:vi.fn(),canShare:()=>{throw new Error('unsupported');}});
+  await receiver();expect(()=>FakeWorker.all[0]!.emit(frame())).not.toThrow();
+  expect(el('result').children.some(x=>x.textContent==='Save file')).toBe(true);
+  expect(el('result').children.at(-1)!.textContent).toBe('Send onward');
+});
+
+it('shares the received bytes and original long filename when web file sharing is available', async () => {
+  const share = vi.fn().mockResolvedValue(undefined);
+  Object.assign(navigator, { share, canShare: () => true });
+  await receiver();
+  FakeWorker.all[0]!.emit(frame(undefined, undefined, 'map.geojson'));
+  el('result').children.find(x => x.textContent === 'Share')!.click();
+  await settle();
+  const file = share.mock.calls[0]![0].files[0] as File;
+  expect(file.name).toBe('map.geojson');
+  expect(new Uint8Array(await file.arrayBuffer())).toEqual(new Uint8Array([7]));
+});
+
+it('sends UTF-8 text unchanged and invalidates an older pending file read', async () => {
+  let resolve!: (value: ArrayBuffer) => void;
+  const sender = await import('../src/send'); sender.enterSend();
+  el('file-input').files = [{ name: 'old.bin', size: 1, type: '', arrayBuffer: () => new Promise<ArrayBuffer>(r => { resolve = r; }) }];
+  el('file-input').onchange?.();
+  el('send-mode-text').click();
+  const text = '  你好，世界 👋\nhttps://example.com/?q=$&\n<script>alert(1)</script>  ';
+  el('text-input').value = text;
+  el('text-input').events.get('input')?.();
+  expect(el('text-start').disabled).toBe(false);
+  el('text-form').events.get('submit')?.({ preventDefault() {} });
+  resolve(new Uint8Array([99]).buffer); await settle();
+  const { store } = await import('../src/store');
+  expect(store.pending!.name).toBe('message.txt');
+  expect(store.pending!.mime).toBe('text/plain');
+  expect(new TextDecoder().decode(store.pending!.payload)).toBe(text);
+  expect(el('stage').hidden).toBe(false);
+  sender.exitSend();
+});
+
+it.each(['ascii', 'multibyte'])('blocks empty and oversized %s text while retaining the draft across mode changes', async kind => {
+  const sender = await import('../src/send'); sender.enterSend();
+  el('send-mode-text').click();
+  el('text-input').value = ' \n\t'; el('text-input').events.get('input')?.();
+  expect(el('text-start').disabled).toBe(true);
+  el('text-form').events.get('submit')?.({ preventDefault() {} });
+  const { store } = await import('../src/store'); expect(store.pending).toBeNull();
+  el('text-input').value = kind === 'ascii' ? 'a'.repeat(4 * 1024 * 1024 + 1) : '光'.repeat(Math.floor(4 * 1024 * 1024 / 3) + 1);
+  el('text-input').events.get('input')?.();
+  expect(el('text-start').disabled).toBe(true);
+  expect(el('text-error').textContent).toContain('4 MiB');
+  el('text-form').events.get('submit')?.({ preventDefault() {} });
+  expect(store.pending).toBeNull();
+  el('text-input').value = 'draft 你好';
+  el('send-mode-file').click(); el('send-mode-text').click();
+  expect(el('text-input').value).toBe('draft 你好');
+  expect(el('text-start').disabled).toBe(false);
+  sender.exitSend();
+  el('text-form').events.get('submit')?.({ preventDefault() {} });
+  expect(store.pending).toBeNull();
+});
+
+it('shows verified text as literal content and copies the original text on web and Android', async () => {
+  bridge.native = true;
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.assign(navigator, { clipboard: { writeText } });
+  await receiver();
+  const text = 'ID3: 你好 👋\n<img src=x onerror=alert(1)>\n  keep spaces  ';
+  const bytes = new TextEncoder().encode(text);
+  FakeWorker.all[0]!.emit(frame(bytes, fnv1a(bytes), 'message.txt'));
+  const panel = el('result').children.find(x => x.className === 'received-text-panel')!;
+  const content = panel.children.find(x => x.id === 'received-text')!;
+  expect(content.value).toBe(text);
+  expect(content.children).toHaveLength(0);
+  expect(content.readOnly).toBe(true);
+  await panel.children.find(x => x.textContent === 'Copy text')!.click();
+  expect(writeText).toHaveBeenCalledWith(text);
+  expect(panel.children.at(-1)!.textContent).toBe('Text copied.');
+  const { setLang } = await import('../src/i18n'); setLang('zh');
+  expect(panel.children.at(-1)!.textContent).toBe('文字已复制。');
+  el('result').children.at(-1)!.click();
+  const { store } = await import('../src/store');
+  expect(store.pending!.payload).toEqual(bytes);
+});
+
+it.each(['missing', 'denied'])('selects received text for manual copying when the clipboard is %s', async mode => {
+  Object.assign(navigator, { clipboard: mode === 'missing' ? undefined : { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
+  await receiver();
+  FakeWorker.all[0]!.emit(frame(new TextEncoder().encode('hello'), undefined, 'message.txt'));
+  const panel = el('result').children.find(x => x.className === 'received-text-panel')!;
+  await panel.children.find(x => x.textContent === 'Copy text')!.click();
+  const content = panel.children.find(x => x.id === 'received-text')!;
+  expect(content.focus).toHaveBeenCalledOnce();
+  expect(content.select).toHaveBeenCalledOnce();
+  expect(panel.children.at(-1)!.textContent).toContain('manually');
+  expect(el('result').children.some(x => x.textContent === 'Save file')).toBe(true);
+});
+
+it('keeps invalid UTF-8 text downloadable without showing a corrupt text preview', async () => {
+  await receiver();
+  FakeWorker.all[0]!.emit(frame(new Uint8Array([0xc3, 0x28]), undefined, 'invalid.txt'));
+  expect(el('result').children.some(x => x.className === 'received-text-panel')).toBe(false);
+  expect(el('result').children.some(x => x.textContent === 'Save file')).toBe(true);
+});
+
+it('does not apply a completed clipboard request to a receiver that has been closed', async () => {
+  let complete!: () => void;
+  Object.assign(navigator, { clipboard: { writeText: () => new Promise<void>(resolve => { complete = resolve; }) } });
+  const receive = await receiver();
+  FakeWorker.all[0]!.emit(frame(new TextEncoder().encode('hello'), undefined, 'message.txt'));
+  const panel = el('result').children.find(x => x.className === 'received-text-panel')!;
+  const pending = panel.children.find(x => x.textContent === 'Copy text')!.click();
+  receive.exitReceive(); complete(); await pending;
+  expect(panel.children.at(-1)!.textContent).toBe('');
+});
+
+
+it('accepts text drops in the editor and still handles dropped files', async () => {
+  const sender = await import('../src/send'); sender.enterSend();
+  el('send-mode-text').click();
+  const preventDefault = vi.fn();
+  el('dropzone').events.get('dragover')?.({ preventDefault, dataTransfer: { types: ['text/plain'] } });
+  el('dropzone').events.get('drop')?.({ preventDefault, dataTransfer: { files: [] } });
+  expect(preventDefault).not.toHaveBeenCalled();
+  const file = { name: 'dropped.bin', type: '', size: 1, arrayBuffer: async () => new Uint8Array([42]).buffer };
+  el('dropzone').events.get('drop')?.({ preventDefault, dataTransfer: { files: [file] } });
+  await settle();
+  expect(preventDefault).toHaveBeenCalledOnce();
+  const { store } = await import('../src/store');
+  expect(store.pending!.name).toBe('dropped.bin');
+  expect([...store.pending!.payload]).toEqual([42]);
+  expect(el('send-mode-file').getAttribute('aria-pressed')).toBe('true');
   sender.exitSend();
 });

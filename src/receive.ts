@@ -14,7 +14,8 @@ import {
 import { setTransferActive, store } from "./store";
 import { ScreenWakeLock } from "./wake-lock";
 import { guessMime, sniffMime, hasExtension, extForMime } from "./util";
-import { t, setText } from "./i18n";
+import { t, setText, type I18nKey } from "./i18n";
+import { decodeTextPreview } from "./text-transfer";
 
 type ReceivePhase =
   | "ready"
@@ -71,7 +72,7 @@ const captureTimes: number[] = [];
 const decodeTimes: number[] = [];
 const scanSamples: { at: number; ms: number }[] = [];
 
-function capSet(id: string, state: "pass" | "fail" | "", key: string) {
+function capSet(id: string, state: "pass" | "fail" | "", key: I18nKey) {
   const el = $(id);
   el.classList.remove("pass", "fail");
   if (state) el.classList.add(state);
@@ -92,7 +93,7 @@ function showPhase(next: ReceivePhase) {
   view.classList.toggle("rx-receiving", next === "receiving");
   view.classList.toggle("rx-waiting", next === "waiting");
   $("rx-session-heading").hidden = !active;
-  const key = {
+  const key = ({
     ready: "ui.rxReady",
     starting: "ui.rxStarting",
     searching: "ui.rxSearching",
@@ -101,7 +102,7 @@ function showPhase(next: ReceivePhase) {
     verifying: "ui.rxVerifying",
     complete: "ui.rxComplete",
     error: "ui.rxError",
-  }[next];
+  } as const)[next];
   setText($("rx-state"), key);
   setText($("rx-title"), key);
   $("rx-state").classList.toggle(
@@ -141,7 +142,7 @@ function stopCapture() {
   setTransferActive("receive", false);
 }
 
-function failReceive(key: string) {
+function failReceive(key: I18nKey) {
   stopCapture();
   done = true;
   decoder = null;
@@ -468,7 +469,8 @@ function resolveFileMeta(
 ): { fileName: string; mime: string } {
   const sniffed = sniffMime(payload);
   const raw = safeName(name);
-  const mime = sniffed ?? guessMime(raw);
+  const guessed = guessMime(raw);
+  const mime = guessed === "text/plain" ? guessed : sniffed ?? guessed;
   if (hasExtension(raw)) return { fileName: raw, mime };
   return { fileName: `${raw}.${extForMime(sniffed)}`, mime };
 }
@@ -570,13 +572,12 @@ function finish(
   progressPercent.textContent = "100%";
   const { fileName, mime } = resolveFileMeta(payload, name);
   const kb = Math.round(totalLen / 1024);
-  const rate = (totalLen / 1024 / seconds).toFixed(1);
+  const rate = seconds >= 0.1 ? (totalLen / 1024 / seconds).toFixed(1) : "—";
   setText(stats, "receive.summary", {
     name: fileName,
     kb,
     sec: seconds.toFixed(1),
     rate,
-    ok: t("receive.hashOk"),
   });
   const icon = document.createElement("div");
   icon.className = "success-icon";
@@ -595,6 +596,49 @@ function finish(
   fileLabel.className = "received-name";
   fileLabel.textContent = `${fileName} · ${kb} KB`;
   result.append(fileLabel);
+
+  const receivedText = decodeTextPreview(payload, mime);
+  if (receivedText !== null) {
+    setText(heading, "receive.textDone");
+    const textPanel = document.createElement("div");
+    textPanel.className = "received-text-panel";
+    const label = document.createElement("label");
+    label.htmlFor = "received-text";
+    setText(label, "receive.textLabel");
+    textPanel.append(label);
+    const content = document.createElement("textarea");
+    content.id = "received-text";
+    content.className = "text-content";
+    content.readOnly = true;
+    content.dir = "auto";
+    content.value = receivedText;
+    textPanel.append(content);
+    const copyStatus = document.createElement("p");
+    copyStatus.className = "hint";
+    copyStatus.setAttribute("role", "status");
+    const copy = document.createElement("button");
+    copy.className = "secondary-button copy-text-button";
+    setText(copy, "receive.copyText");
+    copy.onclick = async () => {
+      copy.disabled = true;
+      try {
+        if (typeof navigator.clipboard?.writeText !== "function") throw new Error("unavailable");
+        await navigator.clipboard.writeText(receivedText);
+        if (resultGen !== captureGen || !entered) return;
+        setText(copyStatus, "receive.copied");
+      } catch {
+        if (resultGen !== captureGen || !entered) return;
+        content.focus();
+        content.select();
+        setText(copyStatus, "receive.copyManual");
+      } finally {
+        copy.disabled = false;
+      }
+    };
+    textPanel.append(copy);
+    textPanel.append(copyStatus);
+    result.append(textPanel);
+  }
 
   const isImage = mime.startsWith("image/");
   if (isImage) {
@@ -631,19 +675,22 @@ function finish(
   };
   result.append(dl);
 
-  const file = new File([payload as BlobPart], fileName, { type: mime });
   const nativeShell = Capacitor.isNativePlatform();
-  if (
-    nativeShell ||
-    (navigator.share && navigator.canShare?.({ files: [file] }))
-  ) {
+  let webShareFile: File | undefined;
+  if (!nativeShell && typeof navigator.share === "function" && typeof navigator.canShare === "function") {
+    try {
+      const candidate = new File([payload as BlobPart], fileName, { type: mime });
+      if (navigator.canShare({ files: [candidate] })) webShareFile = candidate;
+    } catch { /* Unsupported sharing must not block saving or forwarding. */ }
+  }
+  if (nativeShell || webShareFile) {
     const share = document.createElement("button");
     share.className = "secondary-button share-button";
     result.classList.add("has-share");
     setText(share, "receive.share");
     share.onclick = () => {
       if (!nativeShell) {
-        void navigator.share({ files: [file] }).catch(() => undefined);
+        void navigator.share({ files: [webShareFile!] }).catch(() => undefined);
         return;
       }
       share.disabled = true;

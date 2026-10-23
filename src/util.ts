@@ -100,7 +100,7 @@ export function extForMime(mime: string | null): string {
   return mime && Object.hasOwn(EXT_BY_MIME, mime) ? EXT_BY_MIME[mime]! : "bin";
 }
 
-/** True when the name ends in a plausible 1-5 char extension. */
+/** Preserve long, unknown and Unicode suffixes, including hidden-file names. */
 export function hasExtension(name: string): boolean {
-  return /\.[a-z0-9]{1,5}$/i.test(name);
+  return /\.[^\s.]+$/u.test(name);
 }

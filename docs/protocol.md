@@ -12,9 +12,9 @@ The sender splits the file into blocks and continuously displays LT fountain-cod
 
 About `K × 1.18` frames is an estimate, not a guarantee that every frame set decodes. There is no feedback channel; the sender cannot know when the receiver finishes.
 
-帧头为 20 字节，当前格式额外包含 65 字节的文件名区域；文件名 UTF-8 字节最多 64。旧版不带文件名的帧仍可解析。具体实现见 [protocol.ts](../shared/protocol.ts) 和 [fountain.ts](../shared/fountain.ts)。
+帧头为 20 字节，当前格式额外包含 65 字节的文件名区域；文件名 UTF-8 字节最多 63。旧版不带文件名的帧仍可解析。具体实现见 [protocol.ts](../shared/protocol.ts) 和 [fountain.ts](../shared/fountain.ts)。
 
-The header is 20 bytes; the current format adds a 65-byte filename area containing up to 64 UTF-8 bytes. Legacy frames without a filename still parse. See [protocol.ts](../shared/protocol.ts) and [fountain.ts](../shared/fountain.ts).
+The header is 20 bytes; the current format adds a 65-byte filename area containing up to 63 UTF-8 bytes. Legacy frames without a filename still parse. See [protocol.ts](../shared/protocol.ts) and [fountain.ts](../shared/fountain.ts).
 
 ## 文件与资源上限 / File and resource limits
 

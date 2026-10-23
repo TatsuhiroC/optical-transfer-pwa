@@ -71,5 +71,4 @@ await png(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">${background}</svg>`,
 );
 // Splash artwork is transparent; Android's resource generator adds the dark field.
-for (const path of ["resources/splash.png", "resources/splash-dark.png"])
-  await png(path, 2732, svg(0.3, false));
+await png("resources/splash.png", 2732, svg(0.3, false));

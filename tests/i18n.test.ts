@@ -79,3 +79,12 @@ it("removed result labels are released when new live messages are registered", a
     vi.unstubAllGlobals();
   }
 });
+
+it('treats dollar sequences and placeholder-looking file names as literal values', async () => {
+  vi.resetModules();vi.stubGlobal('navigator',{language:'en'});vi.stubGlobal('localStorage',{getItem:()=>null});
+  try {
+    const {t}=await import('../src/i18n');
+    for(const path of ['$&.txt',"$`.txt","$'.txt",'photo-{kb}.jpg'])expect(t('receive.saved',{path})).toBe(`saved to ${path}`);
+    expect(t('receive.summary',{name:'photo-{kb}.jpg',kb:1,sec:2,rate:3})).toContain('photo-{kb}.jpg');
+  } finally {vi.unstubAllGlobals();}
+});

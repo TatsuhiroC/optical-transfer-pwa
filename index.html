@@ -278,9 +278,9 @@
             <div class="send-copy">
               <div class="eyebrow">SEND WITH LIGHT</div>
               <h1 class="send-ready-title">
-                <span data-i18n="ui.chooseAPhoto">选一张照片，</span><br /><span
-                  data-i18n="ui.orAFile"
-                  >或一份文件。</span
+                <span data-i18n="ui.chooseAFile">选一份文件，</span><br /><span
+                  data-i18n="ui.orWriteAMessage"
+                  >或写几句话。</span
                 >
               </h1>
               <h1 class="send-file-title">
@@ -327,37 +327,55 @@
             </div>
             <div class="send-workspace">
               <div class="panel file-picker dropzone" id="dropzone">
-                <div class="photo-icon">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <rect x="3" y="3" width="18" height="18" rx="4" />
-                    <circle cx="8" cy="8" r="1.5" />
-                    <path d="m4 17 5-5 4 4 3-3 5 5" />
-                  </svg>
+                <div class="send-mode-switch" role="group" aria-label="发送内容" data-i18n-aria-label="send.mode">
+                  <button type="button" id="send-mode-file" aria-pressed="true" aria-controls="send-file-panel" data-i18n="send.modeFile">文件</button>
+                  <button type="button" id="send-mode-text" aria-pressed="false" aria-controls="send-text-panel" data-i18n="send.modeText">文字</button>
                 </div>
-                <h2 data-i18n="ui.sendSomethingWorthSharing">
-                  把想分享的，传过去。
-                </h2>
-                <p data-i18n="ui.photosVideosDocumentsAllWelcome">
-                  照片、视频、文档，都可以。
-                </p>
-                <button
-                  type="button"
-                  class="primary-button"
-                  id="btn-photo"
-                  data-i18n="send.btnPhoto"
-                >
-                  选择照片</button
-                ><button
-                  type="button"
-                  class="secondary-button"
-                  id="btn-file"
-                  data-i18n="send.btnFile"
-                >
-                  选择其他文件
-                </button>
-                <p class="desktop-drop" data-i18n="send.drop">
-                  也可把文件拖到这里
-                </p>
+                <div id="send-file-panel">
+                  <div class="photo-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="3" y="3" width="18" height="18" rx="4" />
+                      <circle cx="8" cy="8" r="1.5" />
+                      <path d="m4 17 5-5 4 4 3-3 5 5" />
+                    </svg>
+                  </div>
+                  <h2 data-i18n="ui.sendSomethingWorthSharing">
+                    把想分享的，传过去。
+                  </h2>
+                  <p data-i18n="ui.photosVideosDocumentsAllWelcome">
+                    照片、视频、文档，都可以。
+                  </p>
+                  <button
+                    type="button"
+                    class="primary-button"
+                    id="btn-photo"
+                    data-i18n="send.btnPhoto"
+                  >
+                    选择照片</button
+                  ><button
+                    type="button"
+                    class="secondary-button"
+                    id="btn-file"
+                    data-i18n="send.btnFile"
+                  >
+                    选择其他文件
+                  </button>
+                  <p class="desktop-drop" data-i18n="send.drop">
+                    也可把文件拖到这里
+                  </p>
+                </div>
+                <div id="send-text-panel" hidden>
+                  <form id="text-form">
+                    <label class="text-label" for="text-input" data-i18n="send.textLabel">要发送的文字</label>
+                    <textarea id="text-input" class="text-content" rows="7" dir="auto" aria-describedby="text-hint text-size text-error" placeholder="输入或粘贴文字、链接、代码……" data-i18n-placeholder="send.textPlaceholder"></textarea>
+                    <div class="text-meta">
+                      <span id="text-hint" data-i18n="send.textHint">仅保留在当前页面</span>
+                      <span id="text-size">0.0 KB / 4 MiB</span>
+                    </div>
+                    <p id="text-error" class="text-error" role="status"></p>
+                    <button type="submit" id="text-start" class="primary-button" disabled data-i18n="send.textStart">发送文字</button>
+                  </form>
+                </div>
                 <input id="file-input" type="file" hidden /><input
                   id="photo-input"
                   type="file"

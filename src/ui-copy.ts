@@ -1,11 +1,11 @@
 // Copy shared by the mobile and desktop interface.
-export const uiEn: Record<string, string> = {
+export const uiEn = {
   "ui.letYourFiles": "Let your files,",
   "ui.travelAsLight": "travel as light.",
   "ui.onePhoneLightsUpTheOther":
     "One phone lights up. The other points its camera.",
   "ui.yourPhotosAndFilesTravelBetween":
-    "Your photos and files travel between them.",
+    "Your photos, files and words travel between them.",
   "ui.sending": "Sending",
   "ui.receiving": "Receiving",
   "ui.screenToCameraNoUploads": "Screen to camera · No uploads",
@@ -13,13 +13,13 @@ export const uiEn: Record<string, string> = {
   "ui.noPairing": "No pairing",
   "ui.verifiedFiles": "Verified files",
   "ui.sendAFile": "Send a file",
-  "ui.chooseAPhotoOrFile": "Choose a photo or file",
+  "ui.chooseAPhotoOrFile": "Photos, files or text",
   "ui.receiveAFile": "Receive a file",
   "ui.pointYourCameraAtACode": "Point your camera at a code",
   "ui.openOpticalTransferOnBothDevices":
     "Open Optical Transfer on both devices to begin.",
-  "ui.chooseAPhoto": "Choose a photo,",
-  "ui.orAFile": "or a file.",
+  "ui.chooseAFile": "Choose a file,",
+  "ui.orWriteAMessage": "or write a message.",
   "ui.sendSomethingWorthSharing": "Send something worth sharing.",
   "ui.photosVideosDocumentsAllWelcome":
     "Photos, videos, documents. All welcome.",
@@ -52,7 +52,7 @@ export const uiEn: Record<string, string> = {
   "ui.txProgress": "{n} frames displayed · actual {fps} fps",
   "ui.txSpecs": "{lanes} code(s) · target {fps} fps · error correction {ecc}",
   "ui.txPaused": "Sending paused",
-  "ui.txPausedHint": "Choose resend to start displaying codes again.",
+  "ui.txPausedHint": "Resending starts a new transfer and resets receiving progress.",
   "ui.pickHint":
     "Defaults suit most phones. Raise the sender’s brightness and keep both devices steady.",
   "ui.progressFrames": "Collected {n} / about {m} frames",
@@ -60,13 +60,13 @@ export const uiEn: Record<string, string> = {
   "ui.diagnostics": "Details",
   "ui.statsDetails": "Status & diagnostics",
   "ui.secureNote": "Files travel through the screen, without uploads.",
-};
+} satisfies Record<string, string>;
 
-export const uiZh: Record<string, string> = {
+export const uiZh = {
   "ui.letYourFiles": "让文件，",
   "ui.travelAsLight": "以光抵达。",
   "ui.onePhoneLightsUpTheOther": "一台手机亮起屏幕，另一台对准镜头。",
-  "ui.yourPhotosAndFilesTravelBetween": "照片与文件，就这样传过去。",
+  "ui.yourPhotosAndFilesTravelBetween": "照片、文件和文字，就这样传过去。",
   "ui.sending": "发送中",
   "ui.receiving": "接收中",
   "ui.screenToCameraNoUploads": "屏幕对镜头 · 文件无需上传",
@@ -74,13 +74,13 @@ export const uiZh: Record<string, string> = {
   "ui.noPairing": "无需配对",
   "ui.verifiedFiles": "完整校验",
   "ui.sendAFile": "我要发送",
-  "ui.chooseAPhotoOrFile": "选择照片或文件",
+  "ui.chooseAPhotoOrFile": "照片、文件或文字",
   "ui.receiveAFile": "我要接收",
   "ui.pointYourCameraAtACode": "用镜头对准光码",
   "ui.openOpticalTransferOnBothDevices":
     "两台设备都打开 Optical Transfer，即可开始。",
-  "ui.chooseAPhoto": "选一张照片，",
-  "ui.orAFile": "或一份文件。",
+  "ui.chooseAFile": "选一份文件，",
+  "ui.orWriteAMessage": "或写几句话。",
   "ui.sendSomethingWorthSharing": "把想分享的，传过去。",
   "ui.photosVideosDocumentsAllWelcome": "照片、视频、文档，都可以。",
   "ui.haveTheOtherPhone": "让另一台手机，",
@@ -110,11 +110,11 @@ export const uiZh: Record<string, string> = {
   "ui.txProgress": "已显示 {n} 帧 · 实际 {fps} 帧/秒",
   "ui.txSpecs": "显示 {lanes} 个光码 · 目标 {fps} 帧/秒 · 纠错 {ecc}",
   "ui.txPaused": "发送已暂停",
-  "ui.txPausedHint": "点击重新发送，让另一台设备继续接收。",
+  "ui.txPausedHint": "重新发送会开始新的传输，接收端将从头开始。",
   "ui.pickHint": "默认参数适合大多数手机。发送时提高屏幕亮度，并保持设备稳定。",
   "ui.progressFrames": "已收集 {n} / 约 {m} 帧",
   "ui.verified": "文件完整性校验通过",
   "ui.diagnostics": "详细信息",
   "ui.statsDetails": "运行状态与识别指标",
   "ui.secureNote": "文件通过屏幕传输，无需上传。",
-};
+} satisfies Record<keyof typeof uiEn, string>;

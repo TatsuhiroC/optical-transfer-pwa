@@ -19,6 +19,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { writePrivateFile } from './private-files.mjs';
 
 const MARKER = '// --- injected by scripts/prepare-android.mjs ---';
 const GRADLE = 'app/build.gradle';
@@ -153,7 +154,7 @@ if (signingReady) {
 	const keystore = Buffer.from(keystoreB64, 'base64');
 	if (keystore.length < 100) fail('ANDROID_KEYSTORE_BASE64 does not decode to a keystore file');
 	mkdirSync(join(androidDir, 'app'), { recursive: true });
-	writeFileSync(join(androidDir, KEYSTORE), keystore, { mode: 0o600 });
+	writePrivateFile(join(androidDir, KEYSTORE), keystore);
 
 	// java.util.Properties syntax: backslashes, separators and #/! must be escaped,
 	// and so must leading/trailing spaces (which would otherwise be trimmed away).
@@ -165,7 +166,7 @@ if (signingReady) {
 			.replace(/([=:#!])/g, '\\$1')
 			.replace(/^ /, '\\ ')
 			.replace(/ $/, '\\ ');
-	writeFileSync(
+	writePrivateFile(
 		join(androidDir, PROPS),
 		[
 			`storeFile=${KEYSTORE}`,
@@ -173,8 +174,7 @@ if (signingReady) {
 			`keyAlias=${escape(keyAlias)}`,
 			`keyPassword=${escape(keyPassword)}`,
 			'',
-		].join('\n'),
-		{ mode: 0o600 }
+		].join('\n')
 	);
 	mode = 'release';
 	console.log(`[android] release signing configured (alias "${keyAlias}", keystore ${keystore.length} bytes)`);

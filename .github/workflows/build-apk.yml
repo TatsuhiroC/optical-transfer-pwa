@@ -96,11 +96,16 @@ jobs:
               exit 1
             fi
           fi
+          if [ "${{ steps.signing.outputs.mode }}" = "release" ] && [ -z "$ANDROID_CERT_SHA256" ]; then
+            echo "::error::Release builds require the pinned ANDROID_CERT_SHA256 fingerprint"
+            exit 1
+          fi
           if [ -n "$ANDROID_CERT_SHA256" ]; then
-            # apksigner prints the digest without separators, so normalise whatever format
-            # the secret uses (the docs suggest colons) before comparing.
             EXPECTED="$(printf '%s' "$ANDROID_CERT_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
-            grep -qi "$EXPECTED" apk-certs.txt ||
+            [[ "$EXPECTED" =~ ^[0-9a-f]{64}$ ]] ||
+              { echo "::error::Invalid ANDROID_CERT_SHA256 format"; exit 1; }
+            ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' apk-certs.txt | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            [ "$ACTUAL" = "$EXPECTED" ] ||
               { echo "::error::APK certificate does not match ANDROID_CERT_SHA256"; exit 1; }
           fi
           echo "camera permission in APK:"
@@ -145,8 +150,18 @@ jobs:
           set -euo pipefail
           ASSET="optical-transfer-${VERSION}.apk"
           cp "release-apk/optical-transfer-${VERSION}-release.apk" "$ASSET"
+          CHECKSUMS="SHA256SUMS-${VERSION}.txt"
+          sha256sum "$ASSET" > "$CHECKSUMS"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$ASSET" --clobber
+            gh release upload "$GITHUB_REF_NAME" "$ASSET" "$CHECKSUMS" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$ASSET" --title "$GITHUB_REF_NAME" --generate-notes
+            cat > release-notes.md <<EOF
+          Optical Transfer ${VERSION}
+
+          下载下方 APK 安装，或直接打开网页版。
+          Install the APK below, or open the web app.
+
+          [网页版 / Web app](https://tatsuhiroc.github.io/optical-transfer-pwa/) · [源码 / Source](https://github.com/${GH_REPO}/tree/${GITHUB_REF_NAME})
+          EOF
+            gh release create "$GITHUB_REF_NAME" "$ASSET" "$CHECKSUMS" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
           fi

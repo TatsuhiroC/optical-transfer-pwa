@@ -12,9 +12,10 @@ import {
 } from "../shared/protocol";
 import { setTransferActive, store } from "./store";
 import { guessMime } from "./util";
-import { setText } from "./i18n";
+import { setText, type I18nKey } from "./i18n";
 import { ScreenWakeLock } from "./wake-lock";
 import { FramePacer } from "./frame-pacer";
+import { MAX_TEXT_BYTES, TEXT_FILE_NAME, textByteLength } from "./text-transfer";
 
 const MARGIN = 4; // quiet-zone modules
 const LOOKAHEAD = 3;
@@ -34,6 +35,8 @@ const specs = $("specs");
 const dropzone = $("dropzone");
 const fileInput = $("file-input") as HTMLInputElement;
 const photoInput = $("photo-input") as HTMLInputElement;
+const textInput = $("text-input") as HTMLTextAreaElement;
+const textStart = $("text-start") as HTMLButtonElement;
 const fileMeta = $("file-meta");
 const fileMetaText = $("file-meta-text");
 const fileClear = $("file-clear") as HTMLButtonElement;
@@ -57,6 +60,7 @@ let generation = 0; // bumped on stop/exit/clear; stale loops and timers die
 let pickSeq = 0; // guards against an older file resolve overwriting a newer pick
 let active = false;
 let entered = false;
+let inputMode: "file" | "text" = "file";
 const wakeLock = new ScreenWakeLock();
 let animationFrame: number | undefined;
 let pumpTimer: number | undefined;
@@ -78,6 +82,7 @@ function normalizeCapacity(): number {
 
 function loadFile(file: File) {
   if (!entered) return;
+  showInputMode("file");
   haltStream();
   const pick = ++pickSeq;
   const error = sizeError(
@@ -123,6 +128,40 @@ function loadFile(file: File) {
     });
 }
 
+function updateTextInput(): boolean {
+  const bytes = textByteLength(textInput.value);
+  const tooLarge = bytes > MAX_TEXT_BYTES;
+  setText($("text-size"), "send.textSize", { kb: (bytes / 1024).toFixed(1) });
+  textStart.disabled = !textInput.value.trim() || tooLarge;
+  textInput.setAttribute("aria-invalid", String(tooLarge));
+  if (tooLarge) setText($("text-error"), "send.textLimit");
+  else $("text-error").textContent = "";
+  return !textStart.disabled;
+}
+
+function showInputMode(mode: "file" | "text") {
+  inputMode = mode;
+  for (const candidate of ["file", "text"] as const) {
+    $("send-mode-" + candidate).setAttribute("aria-pressed", String(mode === candidate));
+    $("send-" + candidate + "-panel").hidden = mode !== candidate;
+  }
+  setText(specs, mode === "text" ? "send.chooseText" : "send.choose");
+  if (mode === "text") updateTextInput();
+}
+
+function loadText() {
+  if (!entered || !updateTextInput()) return;
+  haltStream();
+  pickSeq++; // a pending file read must not replace the chosen text
+  store.pending = {
+    payload: new TextEncoder().encode(textInput.value),
+    name: TEXT_FILE_NAME,
+    mime: "text/plain",
+  };
+  showFileMeta();
+  startStream();
+}
+
 function showFileMeta() {
   const p = store.pending;
   if (!p) return;
@@ -147,7 +186,7 @@ function clearSelection() {
   txActions.hidden = true;
   txProgress.hidden = true;
   txProgress.textContent = "";
-  setText(specs, "send.choose");
+  setText(specs, inputMode === "text" ? "send.chooseText" : "send.choose");
   clearInterval(progressTimer);
 }
 
@@ -155,7 +194,7 @@ function sizeError(
   length: number,
   name: string,
   blockLen: number,
-): { key: string; vars?: Record<string, string | number> } | null {
+): { key: I18nKey; vars?: Record<string, string | number> } | null {
   if (length === 0) return { key: "send.empty" };
   if (length > MAX_TRANSFER_BYTES) return { key: "send.memoryLimit" };
   const k = Math.ceil(length / blockLen);
@@ -371,6 +410,7 @@ function stopStream() {
 export function enterSend() {
   entered = true;
   normalizeCapacity();
+  if (!store.pending) showInputMode(inputMode);
   if (store.pending && !active) {
     showFileMeta();
     void startStream();
@@ -403,17 +443,30 @@ photoInput.onchange = () => {
 };
 $("btn-file").onclick = () => fileInput.click();
 $("btn-photo").onclick = () => photoInput.click();
+for (const mode of ["file", "text"] as const) {
+  $("send-mode-" + mode).onclick = () => {
+    clearSelection();
+    showInputMode(mode);
+  };
+}
+textInput.addEventListener("input", updateTextInput);
+$("text-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  loadText();
+});
 
 dropzone.addEventListener("dragover", (e) => {
+  if (!e.dataTransfer?.types.includes("Files")) return;
   e.preventDefault();
   dropzone.classList.add("drag");
 });
 dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
 dropzone.addEventListener("drop", (e) => {
+  const f = e.dataTransfer?.files?.[0];
+  if (!f) return; // allow ordinary text drops into the editor
   e.preventDefault();
   dropzone.classList.remove("drag");
-  const f = e.dataTransfer?.files?.[0];
-  if (f) loadFile(f);
+  loadFile(f);
 });
 
 for (const el of [cfgFps, cfgBytes, cfgEcc, cfgSize, cfgLanes]) {

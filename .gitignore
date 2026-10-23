@@ -12,4 +12,5 @@ android/
 keystore.properties
 *.keystore
 *.jks
+*.secrets.json
 apk-certs.txt

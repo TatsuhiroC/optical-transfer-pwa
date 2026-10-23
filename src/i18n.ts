@@ -7,19 +7,13 @@ export type Lang = "en" | "zh";
 
 type Dict = Record<string, string>;
 
-const en: Dict = {
+const en = {
   ...uiEn,
   "nav.home": "Home",
   "nav.send": "Send",
   "nav.receive": "Receive",
   "lang.toggle": "中文",
   "landing.title": "Optical Transfer",
-  "landing.subtitle":
-    "One app, two roles — files travel as light. No network, no pairing.",
-  "landing.hint1":
-    "Two devices run the same app: one sends, one receives — screen to camera.",
-  "landing.send": "Send a file",
-  "landing.receive": "Receive",
   "invite.button": "Invite",
   "invite.title": "Invite a companion",
   "invite.description": "Have them scan this code to open the same home page.",
@@ -28,9 +22,19 @@ const en: Dict = {
   "invite.error": "Could not create the code. Open the link below instead.",
   "invite.network": "Internet is needed for the first visit.",
 
-  "send.title": "Choose a photo, or a file.",
+  "send.mode": "What to send",
+  "send.modeFile": "File",
+  "send.modeText": "Text",
+  "send.textLabel": "Your message",
+  "send.textPlaceholder": "Type or paste text, a link, or code…",
+  "send.textHint": "Kept in this page only",
+  "send.textSize": "{kb} KB / 4 MiB",
+  "send.textLimit": "Text is limited to 4 MiB. Shorten it to continue.",
+  "send.textStart": "Send text",
+  "send.chooseText": "Type or paste text to send",
+
   "send.subtitle": "Have the other phone point its camera at your screen.",
-  "send.choose": "choose a file to transmit",
+  "send.choose": "Choose a file or text to send",
   "send.drop": "You can also drop a file here",
   "send.btnFile": "Choose another file",
   "send.btnPhoto": "Choose a photo",
@@ -44,11 +48,8 @@ const en: Dict = {
     "Defaults suit most phones. Changing a setting restarts the stream and resets the receiver’s progress.",
   "send.stop": "Stop",
   "send.resend": "Resend",
-  "send.clear": "remove file",
+  "send.clear": "Remove content",
   "send.stopped": "stream stopped",
-  "send.hint":
-    "Max screen brightness helps. Keep the stream running until the receiver says done.",
-  "send.tooLarge": "✗ file too large (protocol ceiling 4 GiB)",
   "send.tooManyBlocks":
     "✗ {name} needs {k} blocks but the protocol caps at 65535 — raise bytes/frame or pick a smaller file",
   "send.empty": "✗ that file is empty — there is nothing to transmit",
@@ -62,11 +63,9 @@ const en: Dict = {
   "receive.workerErr":
     "✗ decoder could not start or stopped responding — restart receiving",
   "receive.stalled": "✗ no new frames for 60 seconds — restart receiving",
-  "app.update": "Update and reopen (clears current files)",
+  "app.update": "Update and reopen (clears current content)",
   "app.updateBusy": "Update available — finish or stop transfer first",
   "send.genErr": "✗ {msg}",
-  "send.progress": "frames sent: {n} · receiver needs ~{m} of any",
-  "send.actualFps": "actual {fps} fps",
 
   "receive.stats": "ready to receive light codes",
   "receive.badStream":
@@ -86,9 +85,12 @@ const en: Dict = {
     "✗ camera permission denied — allow it in your browser settings and retry",
   "receive.searching": "searching for a light-code stream…",
   "receive.done": "Your file has arrived.",
-  "receive.summary": "{name} · {kb} KB in {sec}s · {rate} KB/s · hash {ok}",
-  "receive.hashOk": "verified ✓",
-  "receive.hashBad": "MISMATCH ✗",
+  "receive.textDone": "Your words have arrived.",
+  "receive.textLabel": "Received text",
+  "receive.copyText": "Copy text",
+  "receive.copied": "Text copied.",
+  "receive.copyManual": "Automatic copy is unavailable. Select the text and copy it manually.",
+  "receive.summary": "{name} · {kb} KB in {sec}s · {rate} KB/s · hash verified ✓",
   "receive.save": "Save file",
   "receive.saving": "saving…",
   "receive.saved": "saved to {path}",
@@ -96,7 +98,6 @@ const en: Dict = {
   "receive.share": "Share",
   "receive.forward": "Send onward",
   "receive.noname": "received",
-  "receive.rxTitle": "Point your camera. Catch the light.",
   "receive.rxSubtitle":
     "No upload. Point the camera at the animated QR code on the sender.",
   "receive.capSecure": "Secure context",
@@ -106,12 +107,8 @@ const en: Dict = {
   "receive.capPendingCam": "pending permission",
   "receive.capPass": "ok",
   "receive.capFail": "failed",
-  "receive.receiving": "Receiving",
-  "receive.framesSuffix": "frames",
   "receive.restart": "Restart",
 
-  "credit.by": "by",
-  "credit.base": "based on",
 
   "m.cap": "capture fps",
   "m.scan": "scan time",
@@ -123,9 +120,9 @@ const en: Dict = {
   "m.k": "source blocks",
   "m.block": "block size",
   "m.payload": "payload",
-};
+} satisfies Dict;
 
-const zh: Dict = {
+const zh = {
   ...uiZh,
   "invite.button": "扫码邀请",
   "invite.title": "邀请同伴",
@@ -139,14 +136,20 @@ const zh: Dict = {
   "nav.receive": "接收",
   "lang.toggle": "EN",
   "landing.title": "Optical Transfer",
-  "landing.subtitle": "一个应用，两种角色——文件以光互传。不联网、不配对。",
-  "landing.hint1": "两台设备装同一应用：一台发送、一台接收——屏幕对镜头。",
-  "landing.send": "发送文件",
-  "landing.receive": "接收",
 
-  "send.title": "选一张照片，或一份文件。",
+  "send.mode": "发送内容",
+  "send.modeFile": "文件",
+  "send.modeText": "文字",
+  "send.textLabel": "要发送的文字",
+  "send.textPlaceholder": "输入或粘贴文字、链接、代码……",
+  "send.textHint": "仅保留在当前页面",
+  "send.textSize": "{kb} KB / 4 MiB",
+  "send.textLimit": "文字最多 4 MiB，请精简后再发送。",
+  "send.textStart": "发送文字",
+  "send.chooseText": "输入或粘贴要发送的文字",
+
   "send.subtitle": "发送时，让另一台手机对准你的屏幕。",
-  "send.choose": "选择要发送的文件",
+  "send.choose": "选择文件，或输入文字",
   "send.drop": "也可把文件拖到这里",
   "send.btnFile": "选择其他文件",
   "send.btnPhoto": "选择照片",
@@ -160,10 +163,8 @@ const zh: Dict = {
     "默认设置适合大多数手机。修改参数会重新发送，并重置接收端的进度。",
   "send.stop": "停止",
   "send.resend": "重新发送",
-  "send.clear": "移除文件",
+  "send.clear": "移除内容",
   "send.stopped": "数据流已停止",
-  "send.hint": "屏幕调到最大亮度效果更好。一直保持发送，直到接收端提示完成。",
-  "send.tooLarge": "✗ 文件过大（协议上限 4 GiB）",
   "send.tooManyBlocks":
     "✗ {name} 需要 {k} 个块，但协议上限是 65535——调大每帧字节数，或换个更小的文件",
   "send.empty": "✗ 该文件为空，没有可发送的内容",
@@ -173,11 +174,9 @@ const zh: Dict = {
   "receive.limit": "✗ 已超过 64 MiB 文件上限或解码内存/帧数限制，请重新接收",
   "receive.workerErr": "✗ 解码器启动失败或无响应，请重新接收",
   "receive.stalled": "✗ 已连续 60 秒没有收到新帧，请重新接收",
-  "app.update": "更新并重新打开（会清除当前文件）",
+  "app.update": "更新并重新打开（会清除当前内容）",
   "app.updateBusy": "有可用更新，请先完成或停止传输",
   "send.genErr": "✗ {msg}",
-  "send.progress": "已发送 {n} 帧 · 接收端任意收集 ~{m} 帧即可",
-  "send.actualFps": "实际 {fps} 帧/秒",
 
   "receive.stats": "准备接收光码",
   "receive.badStream": "✗ 已忽略非法的光码流——帧头描述的不是一个合法文件",
@@ -195,10 +194,13 @@ const zh: Dict = {
   "receive.camDenied": "✗ 摄像头权限被拒绝，请在浏览器设置中允许后重试",
   "receive.searching": "正在搜索光码…",
   "receive.done": "文件已抵达。",
+  "receive.textDone": "文字已抵达。",
+  "receive.textLabel": "收到的文字",
+  "receive.copyText": "复制文字",
+  "receive.copied": "文字已复制。",
+  "receive.copyManual": "无法自动复制，请长按或选中文字后手动复制。",
   "receive.summary":
-    "{name} · {kb} KB · 用时 {sec} 秒 · {rate} KB/s · 哈希{ok}",
-  "receive.hashOk": "校验通过 ✓",
-  "receive.hashBad": "不一致 ✗",
+    "{name} · {kb} KB · 用时 {sec} 秒 · {rate} KB/s · 哈希校验通过 ✓",
   "receive.save": "保存文件",
   "receive.saving": "保存中…",
   "receive.saved": "已保存到 {path}",
@@ -206,7 +208,6 @@ const zh: Dict = {
   "receive.share": "分享",
   "receive.forward": "转发给另一台设备",
   "receive.noname": "收到的文件",
-  "receive.rxTitle": "对准屏幕，接住这束光。",
   "receive.rxSubtitle": "无需上传。让摄像头对准发送设备上的动态二维码。",
   "receive.capSecure": "安全环境",
   "receive.capCamera": "摄像头",
@@ -215,12 +216,8 @@ const zh: Dict = {
   "receive.capPendingCam": "待授权",
   "receive.capPass": "通过",
   "receive.capFail": "失败",
-  "receive.receiving": "正在接收",
-  "receive.framesSuffix": "帧",
   "receive.restart": "重新接收",
 
-  "credit.by": "作者",
-  "credit.base": "基于",
 
   "m.cap": "采集帧率",
   "m.scan": "识别耗时",
@@ -232,7 +229,7 @@ const zh: Dict = {
   "m.k": "源数据块",
   "m.block": "单块大小",
   "m.payload": "文件数据",
-};
+} satisfies Record<keyof typeof en, string>;
 
 export type I18nKey = keyof typeof en;
 
@@ -246,21 +243,16 @@ try {
   /* private mode etc. */
 }
 
-export function getLang(): Lang {
-  return lang;
-}
-
 /** Look up a string; {name} placeholders are replaced from `vars`. */
 export function t(
   key: I18nKey,
   vars?: Record<string, string | number>,
 ): string {
-  let s = (lang === "zh" ? zh[key] : en[key]) ?? en[key] ?? key;
-  if (vars) {
-    for (const [k, v] of Object.entries(vars))
-      s = s.replaceAll(`{${k}}`, String(v));
-  }
-  return s;
+  const template = (lang === "zh" ? zh[key] : en[key]) ?? en[key] ?? key;
+  return vars
+    ? template.replace(/\{([^{}]+)\}/g, (placeholder, name: string) =>
+        Object.hasOwn(vars, name) ? String(vars[name]) : placeholder)
+    : template;
 }
 
 const staticEls = new Set<Element>();
@@ -299,9 +291,9 @@ function applyStatic() {
     }
   }
   for (const el of attributeEls) {
-    for (const attr of ["aria-label", "title"]) {
+    for (const attr of ["aria-label", "title", "placeholder"]) {
       const key = el.getAttribute(`data-i18n-${attr}`);
-      if (key) el.setAttribute(attr, t(key));
+      if (key) el.setAttribute(attr, t(key as I18nKey));
     }
   }
   for (const [el, message] of dynamicTexts) {
@@ -329,7 +321,7 @@ function applyStatic() {
 export function bindStatic(root: ParentNode = document) {
   for (const el of root.querySelectorAll("[data-i18n]")) staticEls.add(el);
   for (const el of root.querySelectorAll(
-    "[data-i18n-aria-label], [data-i18n-title]",
+    "[data-i18n-aria-label], [data-i18n-title], [data-i18n-placeholder]",
   ))
     attributeEls.add(el);
 }

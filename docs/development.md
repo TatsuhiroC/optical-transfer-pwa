@@ -70,15 +70,39 @@ Configure these repository secrets in **Settings → Secrets and variables → A
 | `ANDROID_KEYSTORE_PASSWORD` | Keystore 密码 / Keystore password |
 | `ANDROID_KEY_ALIAS` | 密钥别名 / Key alias |
 | `ANDROID_KEY_PASSWORD` | 密钥密码 / Key password |
-| `ANDROID_CERT_SHA256`（可选 / optional） | 预期证书 SHA-256，带冒号 / Expected certificate SHA-256, with colons |
+| `ANDROID_CERT_SHA256`（release 必填 / required for release） | 预期证书 SHA-256，带冒号 / Expected certificate SHA-256, with colons |
 
-当前 `scripts/make-keystore.sh` 会打印新密钥与密码。已有正式签名应复用原密钥；生成工具的安全处理是单独的维护事项。
+生成工具适用于 macOS / Linux，要求 Node.js 和 Java 21。仅为新项目生成密钥；已发布的应用继续使用已有正式密钥。默认目录为 `~/.optical-transfer-pwa/`，自定义输出目录必须归当前用户所有且权限为 700。
 
-The current `scripts/make-keystore.sh` prints generated key material and passwords. Existing releases should reuse their original key; hardening that helper is a separate maintenance task.
+The generator runs on macOS / Linux with Node.js and Java 21. Generate a key only for a new signing identity; existing releases keep their original key. The default directory is `~/.optical-transfer-pwa/`; custom directories must be owned by the current user with mode 700.
 
-正式标签构建要求四个签名 Secret 齐全，否则失败。分支缺少签名配置时可构建 debug 包；不同 runner 生成的 debug 签名可能无法相互覆盖升级。
+```bash
+npm run android:keystore
+```
 
-Tagged builds require all four signing secrets. Branch builds without signing configuration can produce debug APKs, whose runner-generated signatures may differ between builds.
+工具将 keystore 与 `release.keystore.secrets.json` 保存为 600 权限文件，仅输出路径和公开证书指纹。JSON 包含签名材料与密码，请与 keystore 一起私密备份；不要提交到 Git。现有文件不会被覆盖。
+
+The tool writes the keystore and `release.keystore.secrets.json` with mode 600 and prints only paths and the public certificate fingerprint. The JSON contains signing material and passwords: back up both files privately and keep them out of Git. Existing files are never overwritten.
+
+如需配置 GitHub，使用已有的私有配置文件显式运行以下命令。它通过标准输入传递五个 Secret，不会生成或更换密钥，也不会打印这些值；可用 `--repo owner/repo` 指定 fork。
+
+To configure GitHub, explicitly run the following command with an existing private configuration. It sends five secrets on stdin without generating/replacing a key or printing values. Use `--repo owner/repo` for a fork.
+
+需要已安装并登录 GitHub CLI，且当前账号有目标仓库的 Secret 管理权限。
+
+GitHub CLI must be installed and signed in with permission to manage secrets in the target repository.
+
+```bash
+node scripts/make-keystore.mjs --configure-github ~/.optical-transfer-pwa/release.keystore.secrets.json
+```
+
+构建准备脚本也会用新的 600 权限文件替换旧签名配置，避免继承宽松权限或沿符号链接写入。
+
+Build preparation replaces signing files with fresh mode-600 files instead of inheriting old permissions or writing through symlinks.
+
+正式发布要求四个签名 Secret 和 ANDROID_CERT_SHA256 证书指纹齐全，否则失败。分支缺少签名配置时可构建 debug 包；不同 runner 生成的 debug 签名可能无法相互覆盖升级。
+
+Release builds require all four signing secrets and the pinned ANDROID_CERT_SHA256 certificate fingerprint. Branch builds without signing configuration can produce debug APKs, whose runner-generated signatures may differ between builds.
 
 版本名取自 `package.json` 或正式标签；CI 的版本号使用 `100000000 + GITHUB_RUN_NUMBER`。本地可设置 `ANDROID_VERSION_CODE`。
 
