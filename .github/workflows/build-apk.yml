@@ -104,7 +104,9 @@ jobs:
             EXPECTED="$(printf '%s' "$ANDROID_CERT_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
             [[ "$EXPECTED" =~ ^[0-9a-f]{64}$ ]] ||
               { echo "::error::Invalid ANDROID_CERT_SHA256 format"; exit 1; }
-            ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' apk-certs.txt | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            # New SDKs print "V2 Signer:" / "V3 Signer:"; older ones use "Signer #1".
+            # Every certificate must match the pin, including repeated scheme reports.
+            ACTUAL="$(sed -n 's/^.* certificate SHA-256 digest: //p' apk-certs.txt | tr -d '\r:' | tr '[:upper:]' '[:lower:]' | sort -u)"
             [ "$ACTUAL" = "$EXPECTED" ] ||
               { echo "::error::APK certificate does not match ANDROID_CERT_SHA256"; exit 1; }
           fi

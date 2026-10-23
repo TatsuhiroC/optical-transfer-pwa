@@ -13,18 +13,24 @@ const actual = 'ab'.repeat(32);
 const other = 'cd'.repeat(32);
 
 it.skipIf(process.platform === 'win32').each([
-  { pin: '', accepted: false },
-  { pin: 'ab', accepted: false },
-  { pin: 'z'.repeat(64), accepted: false },
-  { pin: other, accepted: false }, // appears as a public-key digest, not the signing certificate
-  { pin: actual, accepted: true },
-  { pin: Array(32).fill('AB').join(':'), accepted: true },
-])('checks the complete pinned signing certificate ($accepted)', ({ pin, accepted }) => {
+  { pin: '', accepted: false, report: '' },
+  { pin: 'ab', accepted: false, report: '' },
+  { pin: 'z'.repeat(64), accepted: false, report: '' },
+  { pin: other, accepted: false, report: '' }, // matches a public-key digest, not the certificate
+  { pin: actual, accepted: true, report: '' },
+  { pin: Array(32).fill('AB').join(':'), accepted: true, report: '' },
+  { pin: actual, accepted: true, report: 'V2 Signer: certificate SHA-256 digest: ' + actual + '\n' },
+  { pin: actual, accepted: true, report: 'V3 Signer: certificate SHA-256 digest: ' + actual + '\r\n' },
+  { pin: actual, accepted: true, report: 'V2 Signer: certificate SHA-256 digest: ' + actual + '\nV3.1 Signer: certificate SHA-256 digest: ' + actual + '\n' },
+  { pin: actual, accepted: false, report: 'Signer #1 certificate SHA-256 digest: ' + actual + '\nSigner #2 certificate SHA-256 digest: ' + other + '\n' },
+  { pin: actual, accepted: false, report: 'V2 Signer: certificate SHA-256 digest: ' + other + '\n' },
+  { pin: actual, accepted: false, report: 'Signer #1 public key SHA-256 digest: ' + actual + '\n' },
+])('checks the complete pinned signing certificate ($accepted)', ({ pin, accepted, report }) => {
   expect(start).toBeGreaterThan(0);
   expect(end).toBeGreaterThan(start);
   const folder = mkdtempSync(join(tmpdir(), 'optical-release-test-'));
   try {
-    writeFileSync(join(folder, 'apk-certs.txt'), 'Signer #1 certificate SHA-256 digest: ' + actual + '\nSigner #1 public key SHA-256 digest: ' + other + '\n');
+    writeFileSync(join(folder, 'apk-certs.txt'), report || 'Signer #1 certificate SHA-256 digest: ' + actual + '\nSigner #1 public key SHA-256 digest: ' + other + '\n');
     const result = spawnSync('bash', ['-c', 'set -euo pipefail\n' + validation], {
       cwd: folder, encoding: 'utf8', env: { ...process.env, ANDROID_CERT_SHA256: pin },
     });
