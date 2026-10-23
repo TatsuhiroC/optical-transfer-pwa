@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { DecodeLimitError, LTDecoder, LTEncoder } from '../shared/fountain';
-import { fnv1a, headerReject, packFrame } from '../shared/protocol';
+import { fnv1a, headerReject, packFrame, parseFrame } from '../shared/protocol';
 
 const bridge = vi.hoisted(() => ({ native: false, write: vi.fn(), getUri: vi.fn(), share: vi.fn(), deleteFile: vi.fn() }));
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => bridge.native } }));
@@ -31,7 +31,8 @@ class Element {
   querySelector() { return this; }
   querySelectorAll() { return []; }
   addEventListener(name: string, cb: (event?: unknown) => unknown) { this.events.set(name, cb); }
-  getContext() { return { putImageData: vi.fn(), drawImage: vi.fn() }; }
+  context = { putImageData: vi.fn(), drawImage: vi.fn() };
+  getContext() { return this.context; }
   play() { return Promise.resolve(); }
   click() { return this.onclick?.(); }
   set innerHTML(_: string) { this.children = []; }
@@ -383,10 +384,15 @@ it('fits both optional QR lanes inside a narrow desktop panel without clipping',
   el('cfg-lanes').value = '2';
   const sender = await import('../src/send');
   sender.enterSend();
-  el('file-input').files = [{ name: 'two-codes.bin', type: '', size: 1, arrayBuffer: async () => new Uint8Array([7]).buffer }];
+  el('file-input').files = [{ name: 'two-codes.bin', type: '', size: 900, arrayBuffer: async () => new Uint8Array(900).buffer }];
   el('file-input').onchange?.(); await settle();
   expect(el('stage').hidden).toBe(false);
   expect(parseFloat(el('qr').style.width!)).toBeLessThanOrEqual(338);
+  const tick = vi.mocked(requestAnimationFrame).mock.calls[0]![0];
+  tick(1000);
+  expect(el('qr').context.drawImage).toHaveBeenCalledOnce();
+  const staging = el('qr').context.drawImage.mock.calls[0]![0] as Element;
+  expect(staging.context.putImageData).toHaveBeenCalledTimes(2);
   sender.exitSend();
 });
 
@@ -551,4 +557,90 @@ it('accepts text drops in the editor and still handles dropped files', async () 
   expect([...store.pending!.payload]).toEqual([42]);
   expect(el('send-mode-file').getAttribute('aria-pressed')).toBe('true');
   sender.exitSend();
+});
+
+
+it.each([1, 415])('sends a %s-byte file in one static QR, including the exact capacity boundary', async length => {
+  const create = vi.spyOn(QRCode, 'create');
+  try {
+    const payload = Uint8Array.from({ length }, (_, i) => i % 256);
+    const sender = await import('../src/send'); sender.enterSend();
+    el('file-input').files = [{ name: '小文件.bin', type: '', size: length, arrayBuffer: async () => payload.buffer }];
+    el('file-input').onchange?.(); await settle();
+    expect(create).toHaveBeenCalledOnce();
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    const bytes = (create.mock.calls[0]![0] as unknown as { data: Uint8Array }[])[0]!.data;
+    const parsed = parseFrame(bytes)!;
+    expect(parsed.header).toMatchObject({ k: 1, seq: 0, blockLen: length, totalLen: length, payloadFnv: fnv1a(payload) });
+    expect(parsed.block).toEqual(payload);
+    expect(el('specs').textContent).toContain('Static code');
+    sender.exitSend();
+    await receiver(); FakeWorker.all[0]!.emit(bytes);
+    expect(el('stats').textContent).toContain('verified');
+    el('result').children.at(-1)!.click();
+    const { store } = await import('../src/store');
+    expect(store.pending!.payload).toEqual(payload);
+    expect(store.pending!.name).toBe('小文件.bin');
+  } finally { create.mockRestore(); }
+});
+
+it('uses dynamic transmission when the payload exceeds the single-code capacity by one byte', async () => {
+  const sender = await import('../src/send'); sender.enterSend();
+  el('file-input').files = [{ name: 'boundary.bin', type: '', size: 416, arrayBuffer: async () => new Uint8Array(416).buffer }];
+  el('file-input').onchange?.(); await settle();
+  expect(requestAnimationFrame).toHaveBeenCalledOnce();
+  expect(el('specs').textContent).toContain('target 24 fps');
+  expect(el('stage').hidden).toBe(false);
+  sender.exitSend();
+});
+
+it('keeps a short Unicode message in one code even with two lanes selected; resizing reuses the code', async () => {
+  const create = vi.spyOn(QRCode, 'create');
+  try {
+    el('cfg-lanes').value = '2';
+    const sender = await import('../src/send'); sender.enterSend();
+    el('send-mode-text').click();
+    const text = '  你好，Optical Transfer 👋\nhttps://example.com/  ';
+    el('text-input').value = text;
+    el('text-form').events.get('submit')?.({ preventDefault() {} });
+    expect(create).toHaveBeenCalledOnce();
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(el('qr').style.width).toBe(el('qr').style.height);
+    const listeners = vi.mocked(window.addEventListener).mock.calls as unknown as [string, () => void][];
+    const resize = listeners.find(([type]) => type === 'resize')![1];
+    Object.assign(window, { innerWidth: 1366, innerHeight: 768 }); resize();
+    expect(create).toHaveBeenCalledOnce();
+    expect(el('qr').context.drawImage).toHaveBeenCalledTimes(2);
+    expect(el('qr').style.width).toBe(el('qr').style.height);
+    vi.advanceTimersByTime(2000);
+    expect(create).toHaveBeenCalledOnce();
+    const bytes = (create.mock.calls[0]![0] as unknown as { data: Uint8Array }[])[0]!.data;
+    el('btn-stop').click(); await settle();
+    expect(el('stage').hidden).toBe(true);
+    expect(release).toHaveBeenCalled();
+    el('btn-resend').click();
+    expect(create).toHaveBeenCalledTimes(2);
+    sender.exitSend();
+    await receiver(); FakeWorker.all[0]!.emit(bytes);
+    const panel = el('result').children.find(x => x.className === 'received-text-panel')!;
+    expect(panel.children.find(x => x.id === 'received-text')!.value).toBe(text);
+    expect(el('stats').textContent).toContain('verified');
+  } finally { create.mockRestore(); }
+});
+
+it('shows a recoverable error if static QR generation fails', async () => {
+  const create = vi.spyOn(QRCode, 'create').mockImplementation(() => { throw Error('QR fixture failure'); });
+  try {
+    const sender = await import('../src/send'); sender.enterSend();
+    el('file-input').files = [{ name: 'tiny.bin', type: '', size: 1, arrayBuffer: async () => new Uint8Array([7]).buffer }];
+    el('file-input').onchange?.(); await settle();
+    expect(el('specs').textContent).toContain('QR fixture failure');
+    expect(el('stage').hidden).toBe(true);
+    expect(el('btn-resend').hidden).toBe(false);
+    expect(lock).not.toHaveBeenCalled();
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    sender.exitSend();
+  } finally { create.mockRestore(); }
 });

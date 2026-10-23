@@ -232,8 +232,11 @@ function startStream() {
   const frameBytes = normalizeCapacity();
   const ecc = cfgEcc.value as "L" | "M" | "Q" | "H";
   const displayPx = Number(cfgSize.value);
-  const lanes = cfgLanes.value === "2" ? 2 : 1; // 1 = original single-code mode
-  const blockLen = blockLenFor(frameBytes);
+  // Respect the selected density and ECC rather than making a denser QR just
+  // to fit. A single code carries the original bytes without fountain padding.
+  const singleCode = payload.length <= blockLenFor(frameBytes);
+  const lanes = singleCode ? 1 : cfgLanes.value === "2" ? 2 : 1;
+  const blockLen = singleCode ? payload.length : blockLenFor(frameBytes);
   const tooBig = sizeError(payload.length, p.name, blockLen);
   if (tooBig) {
     setText(specs, tooBig.key, tooBig.vars);
@@ -242,11 +245,11 @@ function startStream() {
   if (gen !== generation) return; // superseded while checking
   const sessionId = crypto.getRandomValues(new Uint16Array(1))[0]!;
   const name = p.name; // packFrame truncates by bytes, on a code-point boundary
-  const encoder = new LTEncoder(payload, blockLen, sessionId);
+  const encoder = singleCode ? null : new LTEncoder(payload, blockLen, sessionId);
   const header: FrameHeader = {
     sessionId,
     seq: 0,
-    k: encoder.k,
+    k: encoder?.k ?? 1,
     blockLen,
     totalLen: payload.length,
     payloadFnv: fnv1a(payload),
@@ -297,7 +300,11 @@ function startStream() {
   };
 
   const makeFrame = (seq: number): ImageData => {
-    const bytes = packFrame({ ...header, seq }, encoder.encode(seq), name);
+    const bytes = packFrame(
+      { ...header, seq },
+      encoder ? encoder.encode(seq) : payload,
+      name,
+    );
     const qr = QRCode.create(
       [{ data: bytes, mode: "byte" } as unknown as QRCode.QRCodeSegment],
       {
@@ -310,7 +317,9 @@ function startStream() {
       version = qr.version;
       modules = qr.modules.size;
       sizeCanvas();
-      setText(specs, "ui.txSpecs", { lanes, fps: txFps, ecc });
+      setText(specs, singleCode ? "ui.txStaticSpecs" : "ui.txSpecs", {
+        lanes, fps: txFps, ecc,
+      });
     }
     const size = qr.modules.size;
     const data = qr.modules.data;
@@ -328,6 +337,54 @@ function startStream() {
     return img;
   };
 
+  const showGenerationError = (err: unknown) => {
+    haltStream();
+    btnResend.hidden = false;
+    txActions.hidden = false;
+    setText(specs, "send.genErr", {
+      msg: err instanceof Error ? err.message : String(err),
+    });
+  };
+  const showTransfer = () => {
+    active = true;
+    setTransferActive("send", true);
+    wakeLock.setActive(true);
+    btnStop.hidden = false;
+    btnResend.hidden = true;
+    stage.hidden = false;
+    $("send-paused").hidden = true;
+    txActions.hidden = false;
+    txProgress.hidden = false;
+    txProgress.textContent = "";
+  };
+  const draw = (images: ImageData[]) => {
+    const t = modules + 2 * MARGIN;
+    const sctx = staging.getContext("2d")!;
+    images.forEach((img, lane) => {
+      sctx.putImageData(img, stack ? 0 : lane * t, stack ? lane * t : 0);
+    });
+    const ctx = canvas.getContext("2d")!;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(staging, 0, 0, canvas.width, canvas.height);
+  };
+
+  if (singleCode) {
+    try {
+      const image = makeFrame(0);
+      draw([image]);
+      showTransfer();
+      setText(txProgress, "ui.txStaticProgress");
+      resizeHandler = () => {
+        sizeCanvas(); // resizing clears both canvases; repaint the same code
+        draw([image]);
+      };
+      window.addEventListener("resize", resizeHandler);
+    } catch (err) {
+      showGenerationError(err);
+    }
+    return; // no encoder, animation loop, frame queue or progress timer
+  }
+
   const pump = () => {
     if (gen !== generation) return;
     try {
@@ -336,28 +393,12 @@ function startStream() {
         if (lanes === 2) queue.push(makeFrame(LANE_OFFSET + nextSeqB++));
       }
     } catch (err) {
-      haltStream();
-      stage.hidden = true;
-      btnStop.hidden = true;
-      btnResend.hidden = false;
-      txActions.hidden = false;
-      setText(specs, "send.genErr", {
-        msg: err instanceof Error ? err.message : String(err),
-      });
+      showGenerationError(err);
     }
   };
   pump();
   if (gen !== generation) return;
-  active = true;
-  setTransferActive("send", true);
-  wakeLock.setActive(true);
-  btnStop.hidden = false;
-  btnResend.hidden = true;
-  stage.hidden = false;
-  $("send-paused").hidden = true;
-  txActions.hidden = false;
-  txProgress.hidden = false;
-  txProgress.textContent = "";
+  showTransfer();
   resizeHandler = sizeCanvas;
   window.addEventListener("resize", resizeHandler);
 
@@ -382,15 +423,7 @@ function startStream() {
     animationFrame = requestAnimationFrame(tick);
     if (!pacer.due(now) || queue.length < lanes) return;
     pumpTimer = window.setTimeout(pump, 0);
-    const t = modules + 2 * MARGIN; // per-code pixel size in staging space
-    const sctx = staging.getContext("2d")!;
-    for (let l = 0; l < lanes; l++) {
-      const img = queue.shift()!;
-      sctx.putImageData(img, stack ? 0 : l * t, stack ? l * t : 0);
-    }
-    const ctx = canvas.getContext("2d")!;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(staging, 0, 0, canvas.width, canvas.height);
+    draw(queue.splice(0, lanes));
     pacer.displayed(now);
     displayedCodes += lanes;
     displayTimes.push(now);

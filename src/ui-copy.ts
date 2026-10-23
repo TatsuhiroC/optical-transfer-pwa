@@ -50,6 +50,8 @@ export const uiEn = {
   "ui.waitHint":
     "No new data right now. Your progress is kept. Hold steady and point at the code again.",
   "ui.txProgress": "{n} frames displayed · actual {fps} fps",
+  "ui.txStaticSpecs": "Static code · one scan · error correction {ecc}",
+  "ui.txStaticProgress": "Keep this code visible for the receiver to scan.",
   "ui.txSpecs": "{lanes} code(s) · target {fps} fps · error correction {ecc}",
   "ui.txPaused": "Sending paused",
   "ui.txPausedHint": "Resending starts a new transfer and resets receiving progress.",
@@ -108,6 +110,8 @@ export const uiZh = {
   "ui.waitHint":
     "暂时没有新数据，已收到的进度会保留。请保持设备稳定并重新对准光码。",
   "ui.txProgress": "已显示 {n} 帧 · 实际 {fps} 帧/秒",
+  "ui.txStaticSpecs": "静态二维码 · 一次扫描即可接收 · 纠错 {ecc}",
+  "ui.txStaticProgress": "保持二维码显示，等待对方扫描。",
   "ui.txSpecs": "显示 {lanes} 个光码 · 目标 {fps} 帧/秒 · 纠错 {ecc}",
   "ui.txPaused": "发送已暂停",
   "ui.txPausedHint": "重新发送会开始新的传输，接收端将从头开始。",

@@ -21,6 +21,7 @@ One device displays animated QR codes. The other scans them with its camera. Tra
 
 - **Photos and files**: choose from your phone’s library or drag a file in on desktop.
 - **Text messages**: type or paste up to 4 MiB of text; copy it on arrival or save it as a text file.
+- **One code for small content**: files or text that fit the selected code capacity use a static QR; larger content uses animated codes.
 - **Phone and desktop transfers**: use a browser or install the Android APK.
 - **QR invitations**: tap “Invite” on the home page so a friend can scan and open the same site.
 - **Save, share and forward**: export or relay a file after its integrity check passes.
@@ -29,7 +30,7 @@ One device displays animated QR codes. The other scans them with its camera. Tra
 ## Start in three steps
 
 1. **Open the app on both devices.** Use “Invite” to help the other person find it.
-2. **Choose a file or enter text on the sender** and keep the animated codes on screen.
+2. **Choose a file or enter text on the sender** and keep the QR code on screen.
 3. **Start the receiver’s camera**, point it at the code, and save after verification.
 
 Raise the sender’s brightness, keep the whole QR code in view, and hold both devices steady.

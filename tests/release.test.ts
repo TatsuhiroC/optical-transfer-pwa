@@ -12,6 +12,17 @@ const validation = workflow.slice(start, end).replaceAll('${{ steps.signing.outp
 const actual = 'ab'.repeat(32);
 const other = 'cd'.repeat(32);
 
+it('keeps app and downloaded dependency versions consistent in the lockfile', () => {
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+  const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+  expect(lock.version).toBe(pkg.version);
+  expect(lock.packages[''].version).toBe(pkg.version);
+  for (const [name, entry] of Object.entries(lock.packages) as [string, { resolved?: string; version: string }][]) {
+    if (!entry.resolved?.startsWith('https://registry.npmjs.org/')) continue;
+    expect(decodeURIComponent(new URL(entry.resolved).pathname).endsWith('-' + entry.version + '.tgz'), name).toBe(true);
+  }
+});
+
 it.skipIf(process.platform === 'win32').each([
   { pin: '', accepted: false, report: '' },
   { pin: 'ab', accepted: false, report: '' },
