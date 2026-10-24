@@ -370,7 +370,7 @@
                     <textarea id="text-input" class="text-content" rows="7" dir="auto" aria-describedby="text-hint text-size text-error" placeholder="输入或粘贴文字、链接、代码……" data-i18n-placeholder="send.textPlaceholder"></textarea>
                     <div class="text-meta">
                       <span id="text-hint" data-i18n="send.textHint">仅保留在当前页面</span>
-                      <span id="text-size">0.0 KB / 4 MiB</span>
+                      <span id="text-size">0 B / 4 MiB</span>
                     </div>
                     <p id="text-error" class="text-error" role="status"></p>
                     <button type="submit" id="text-start" class="primary-button" disabled data-i18n="send.textStart">发送文字</button>
@@ -573,6 +573,10 @@
               <div class="metric">
                 <div class="k" data-i18n="m.time">已用时间</div>
                 <div class="v" id="m-time">—</div>
+              </div>
+              <div>
+                <div class="k" data-i18n="m.eta">预计剩余时间</div>
+                <div class="v" id="m-eta" role="timer">—</div>
               </div>
             </div>
           </section>

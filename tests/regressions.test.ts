@@ -745,3 +745,56 @@ it('fills the former default QR version without increasing its module count or r
   expect(full.errorCorrectionLevel).toEqual(previous.errorCorrectionLevel);
   expect(next.version).toBeGreaterThan(full.version);
 });
+
+it('shows MB throughout sending and receiving a 7000 KB file', async () => {
+  const payload = new Uint8Array(7000 * 1024);
+  const sender = await import('../src/send'); sender.enterSend();
+  el('file-input').files = [{ name: 'large.bin', type: '', size: payload.length, arrayBuffer: async () => payload.buffer }];
+  el('file-input').onchange?.(); await settle();
+  expect(el('file-meta-text').textContent).toBe('large.bin · 6.8 MB');
+  sender.exitSend();
+  await receiver();
+  const encoder = new LTEncoder(payload, 2346, 1234);
+  FakeWorker.all[0]!.emit(packFrame({ sessionId: 1234, seq: 0, k: encoder.k, blockLen: 2346, totalLen: payload.length, payloadFnv: fnv1a(payload) }, encoder.encode(0), 'large.bin'));
+  vi.advanceTimersByTime(200);
+  expect(el('rx-size').textContent).toBe('6.8 MB');
+  expect(el('m-payload').textContent).toBe('6.8 MB');
+});
+
+it('shows a live ETA, translates it, waits during gaps, and resets it for a new session', async () => {
+  await receiver();
+  const payload = Uint8Array.from({ length: 1000 }, (_, i) => i % 256);
+  const encoder = new LTEncoder(payload, 10, 1234);
+  const emit = (seq: number, sessionId = 1234) => {
+    const current = sessionId === 1234 ? encoder : new LTEncoder(payload, 10, sessionId);
+    FakeWorker.all[0]!.emit(packFrame({ sessionId, seq, k: current.k, blockLen: 10, totalLen: payload.length, payloadFnv: fnv1a(payload) }, current.encode(seq), 'eta.bin'));
+  };
+  emit(0); expect(el('m-eta').textContent).toBe('Estimating…');
+  for (let i = 1; i <= 10; i++) { vi.advanceTimersByTime(100); emit(i); }
+  vi.advanceTimersByTime(200);
+  expect(el('m-eta').textContent).toMatch(/^~ \d+:\d\d$/);
+  expect(el('m-rate').textContent).toMatch(/KB\/s$/);
+  const { setLang } = await import('../src/i18n'); setLang('zh');
+  expect(el('m-eta').textContent).toMatch(/^约 \d+:\d\d$/);
+  vi.advanceTimersByTime(2000);
+  expect(el('m-eta').textContent).toBe('等待数据');
+  expect(el('m-rate').textContent).toBe('0.0 KB/s');
+  emit(11); vi.advanceTimersByTime(200);
+  expect(el('m-eta').textContent).toBe('估算中…');
+  emit(0, 5678);
+  expect(el('m-eta').textContent).toBe('估算中…');
+  el('restart').click(); expect(el('m-eta').textContent).toBe('—');
+});
+
+it('uses readable MB in a verified large file result and completes ETA', async () => {
+  await receiver();
+  const payload = new Uint8Array(2 * 1024 ** 2).fill(7);
+  const encoder = new LTEncoder(payload, 2868, 1234);
+  const hash = fnv1a(payload);
+  for (let seq = 0; seq < encoder.k * 4 && !stopped.mock.calls.length; seq++) {
+    FakeWorker.all[0]!.emit(packFrame({ sessionId: 1234, seq, k: encoder.k, blockLen: 2868, totalLen: payload.length, payloadFnv: hash }, encoder.encode(seq), 'result.bin'));
+  }
+  expect(el('stats').textContent).toContain('2.0 MB');
+  expect(el('result').children.some(x => x.textContent === 'result.bin · 2.0 MB')).toBe(true);
+  expect(el('m-eta').textContent).toBe('0:00');
+});

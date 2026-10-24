@@ -87,6 +87,10 @@ Workers use ZXing-C++ WebAssembly. They track valid transfer codes at original r
 
 进度每秒更新五次，重复帧不重绘。诊断面板显示识别耗时和线程忙碌时跳过画面的比例；软件与合成二维码测试不能代替真实屏幕、摄像头和光照下的速度测量。
 
+文件大小以 1024 为进位显示 B、KB、MB 或 GB。接收端的预计剩余时间（ETA）参考最近约 8 秒的新帧速度和预计所需帧数，重复扫描不计入。刚开始显示“估算中”，超过 1.5 秒没有新帧时显示“等待数据”；继续接收后重新积累速度样本。达到预计帧数但尚未还原时显示“补充数据中”，不会提前显示完成。喷泉码的开销具有变化，ETA 只是估计。
+
+Sizes use B, KB, MB or GB with 1024-based conversion. Receiver ETA uses roughly the last eight seconds of distinct-frame arrivals and the estimated required frame count, excluding duplicate scans. It warms up initially, waits after 1.5 seconds without new frames, and rebuilds its rate sample after a gap. If the nominal frame goal is reached before decoding finishes, it shows “Collecting extra frames” rather than promising completion. Fountain overhead varies, so ETA is an estimate.
+
 Progress updates five times per second and ignores duplicate-frame redraws. Diagnostics show scan duration and frames skipped while workers are busy. Software and synthetic QR tests do not establish real screen-to-camera throughput.
 
 ## 数据保护 / Data protection

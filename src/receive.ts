@@ -17,6 +17,7 @@ import { ScreenWakeLock } from "./wake-lock";
 import { guessMime, sniffMime, hasExtension, extForMime } from "./util";
 import { t, setText, type I18nKey } from "./i18n";
 import { decodeTextPreview } from "./text-transfer";
+import { formatBytes, formatDuration, formatRate, ReceptionEstimator, RECEIVE_STALL_MS } from "./transfer-metrics";
 
 type ReceivePhase =
   | "ready"
@@ -28,6 +29,7 @@ type ReceivePhase =
   | "complete"
   | "error";
 let receivePhase: ReceivePhase | null = null;
+const receptionEstimator = new ReceptionEstimator();
 const OVERHEAD_EST = 1.18; // expected frames ≈ K × this (robust-soliton ε)
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -363,7 +365,7 @@ function renderProgress() {
 function showRxFile(name: string, totalLen: number) {
   if (name) $("rx-file").textContent = safeName(name);
   else setText($("rx-file"), "receive.noname");
-  $("rx-size").textContent = `${Math.round(totalLen / 1024)} KB`;
+  $("rx-size").textContent = formatBytes(totalLen);
 }
 
 function onDecoded(bytes: Uint8Array) {
@@ -392,6 +394,10 @@ function onDecoded(bytes: Uint8Array) {
       header.totalLen,
     );
     session = { header: { ...header }, name: parsed.name, kind: parsed.kind };
+    receptionEstimator.reset();
+    metric("m-rate").textContent = "—";
+    metric("m-time").textContent = "—";
+    setText(metric("m-eta"), "receive.etaEstimating");
     startTs = performance.now();
     lastFrameTs = startTs;
     pulseIdx = 0;
@@ -426,6 +432,7 @@ function onDecoded(bytes: Uint8Array) {
   }
   if (decoder.framesNew > previous) {
     lastFrameTs = performance.now();
+    receptionEstimator.record(lastFrameTs, decoder.framesNew);
     if (stats.textContent) stats.textContent = "";
     showPhase("receiving");
 
@@ -576,11 +583,12 @@ function finish(
   const metadata = resolveFileMeta(payload, name);
   const fileName = metadata.fileName;
   const mime = kind === "text" ? "text/plain" : metadata.mime;
-  const kb = Math.round(totalLen / 1024);
-  const rate = seconds >= 0.1 ? (totalLen / 1024 / seconds).toFixed(1) : "—";
+  const size = formatBytes(totalLen);
+  const rate = seconds >= 0.1 ? formatRate(totalLen / seconds) : "— KB/s";
+  metric("m-eta").textContent = "0:00";
   setText(stats, "receive.summary", {
     name: fileName,
-    kb,
+    size,
     sec: seconds.toFixed(1),
     rate,
   });
@@ -599,7 +607,7 @@ function finish(
   result.append(verified);
   const fileLabel = document.createElement("p");
   fileLabel.className = "received-name";
-  fileLabel.textContent = `${fileName} · ${kb} KB`;
+  fileLabel.textContent = `${fileName} · ${size}`;
   result.append(fileLabel);
 
   const receivedText = kind === "text" ? decodeTextPreview(payload, mime) : null;
@@ -743,24 +751,28 @@ function updateStats() {
     : "—";
   if (!decoder) return;
   renderProgress();
-  showPhase(now - lastFrameTs > 1500 ? "waiting" : "receiving");
+  showPhase(now - lastFrameTs > RECEIVE_STALL_MS ? "waiting" : "receiving");
   if (now - lastFrameTs > 60000) {
     failReceive("receive.stalled");
     return;
   }
   const elapsed = (now - startTs) / 1000;
-  const kbs =
-    (decoder.framesNew * decoder.blockLen) /
-    OVERHEAD_EST /
-    1024 /
-    Math.max(0.1, elapsed);
-  metric("m-rate").textContent =
-    `${(receivePhase === "waiting" ? 0 : kbs).toFixed(1)} KB/s`;
-  metric("m-time").textContent = `${elapsed.toFixed(0)} s`;
+  const estimate = receptionEstimator.estimate(now, Math.ceil(decoder.k * OVERHEAD_EST));
+  const byteRate = estimate.framesPerSecond === null ? null
+    : estimate.framesPerSecond * decoder.blockLen / OVERHEAD_EST;
+  metric("m-rate").textContent = byteRate === null ? "—" : formatRate(byteRate);
+  metric("m-time").textContent = formatDuration(Math.floor(elapsed));
+  if (estimate.state === "remaining") {
+    setText(metric("m-eta"), "receive.etaRemaining", { time: formatDuration(estimate.seconds!) });
+  } else {
+    setText(metric("m-eta"), {
+      estimating: "receive.etaEstimating", waiting: "receive.etaWaiting", extra: "receive.etaExtra",
+    }[estimate.state] as I18nKey);
+  }
   metric("m-frames").textContent = `${decoder.framesNew}/${decoder.framesDup}`;
   metric("m-k").textContent = String(decoder.k);
   metric("m-block").textContent = `${decoder.blockLen} B`;
-  metric("m-payload").textContent = `${Math.round(decoder.totalLen / 1024)} KB`;
+  metric("m-payload").textContent = formatBytes(decoder.totalLen);
 }
 
 /** Back to the very start: stop the camera + capture loop, drop the
@@ -773,6 +785,7 @@ function resetReceive() {
   showPhase("ready");
   decoder = null;
   session = null;
+  receptionEstimator.reset();
   for (const url of previewUrls) URL.revokeObjectURL(url);
   previewUrls.clear();
   captureTimes.length = 0;
@@ -792,6 +805,7 @@ function resetReceive() {
   $("rx-size").textContent = "";
   metric("m-rate").textContent = "—";
   metric("m-time").textContent = "—";
+  metric("m-eta").textContent = "—";
   bar.style.width = "0%";
   progressPercent.textContent = "0%";
   setText(progressFrames, "ui.progressFrames", { n: 0, m: 0 });

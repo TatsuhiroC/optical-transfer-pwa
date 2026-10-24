@@ -12,6 +12,7 @@ import {
 } from "../shared/protocol";
 import { setTransferActive, store } from "./store";
 import { guessMime } from "./util";
+import { formatBytes } from "./transfer-metrics";
 import { setText, type I18nKey } from "./i18n";
 import { ScreenWakeLock } from "./wake-lock";
 import { FramePacer } from "./frame-pacer";
@@ -133,7 +134,7 @@ function loadFile(file: File) {
 function updateTextInput(): boolean {
   const bytes = textByteLength(textInput.value);
   const tooLarge = bytes > MAX_TEXT_BYTES;
-  setText($("text-size"), "send.textSize", { kb: (bytes / 1024).toFixed(1) });
+  setText($("text-size"), "send.textSize", { size: formatBytes(bytes) });
   textStart.disabled = !textInput.value.trim() || tooLarge;
   textInput.setAttribute("aria-invalid", String(tooLarge));
   if (tooLarge) setText($("text-error"), "send.textLimit");
@@ -168,12 +169,11 @@ function loadText() {
 function showFileMeta() {
   const p = store.pending;
   if (!p) return;
-  const kb = Math.max(1, Math.round(p.payload.length / 1024));
   $("view-send").classList.add("has-file");
   dropzone.hidden = true; // the picker gives way to the picked file card
   fileMeta.hidden = false;
   fileClear.hidden = false;
-  fileMetaText.textContent = `${p.name} · ${kb} KB`;
+  fileMetaText.textContent = `${p.name} · ${formatBytes(p.payload.length)}`;
 }
 
 function clearSelection() {
