@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { DecodeLimitError, LTDecoder, LTEncoder } from '../shared/fountain';
-import { fnv1a, headerReject, packFrame, parseFrame } from '../shared/protocol';
+import { fnv1a, headerReject, packFrame, parseFrame, type TransferKind } from '../shared/protocol';
 
 const bridge = vi.hoisted(() => ({ native: false, write: vi.fn(), getUri: vi.fn(), share: vi.fn(), deleteFile: vi.fn() }));
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => bridge.native } }));
@@ -16,7 +16,7 @@ vi.mock('@capacitor/share', () => ({ Share: { share: bridge.share } }));
 class Element {
   className = ''; id = ''; readOnly = false;
   textContent = ''; style: Record<string, string> = {}; hidden = false; disabled = false;
-  options = [500, 1000, 1465, 1850, 2331, 2953].map(n => ({ value: String(n), disabled: false }));
+  options = [500, 1000, 1465, 1850, 2331, 2431, 2953].map(n => ({ value: String(n), disabled: false }));
   events = new Map<string, (event?: unknown) => unknown>();
   attributes = new Map<string, string>();
   setAttribute(name: string, value: string) { this.attributes.set(name, value); }
@@ -85,8 +85,8 @@ afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals()
 async function receiver() {
   const module = await import('../src/receive'); module.enterReceive(); el('start').click(); await settle(); for (const w of FakeWorker.all) w.ready(); return module;
 }
-function frame(data = new Uint8Array([7]), hash = fnv1a(data), name = 'test.bin') {
-  return packFrame({ sessionId: 1234, seq: 0, k: 1, blockLen: data.length, totalLen: data.length, payloadFnv: hash }, data, name);
+function frame(data = new Uint8Array([7]), hash = fnv1a(data), name = 'test.bin', kind: TransferKind = 'file') {
+  return packFrame({ sessionId: 1234, seq: 0, k: 1, blockLen: data.length, totalLen: data.length, payloadFnv: hash }, data, name, kind);
 }
 
 it('bounds malicious dependent equations even for a two-byte stream', () => {
@@ -254,10 +254,10 @@ it('Android tag and branch version codes increase and config can be regenerated'
 
 it('QR capacity table matches the supported byte presets', () => {
   const accepted: Record<string, number[]> = { L: [], M: [], Q: [], H: [] };
-  for (const ecc of ['L', 'M', 'Q', 'H'] as const) for (const n of [500, 1000, 1465, 1850, 2331, 2953]) {
+  for (const ecc of ['L', 'M', 'Q', 'H'] as const) for (const n of [500, 1000, 1465, 1850, 2331, 2431, 2953]) {
     try { QRCode.create([{ data: new Uint8Array(n), mode: 'byte' } as unknown as QRCode.QRCodeSegment], { errorCorrectionLevel: ecc }); accepted[ecc]!.push(n); } catch {}
   }
-  expect(accepted).toEqual({ L: [500, 1000, 1465, 1850, 2331, 2953], M: [500, 1000, 1465, 1850, 2331], Q: [500, 1000, 1465], H: [500, 1000] });
+  expect(accepted).toEqual({ L: [500, 1000, 1465, 1850, 2331, 2431, 2953], M: [500, 1000, 1465, 1850, 2331], Q: [500, 1000, 1465], H: [500, 1000] });
 });
 
 it('native share surfaces actual bridge errors and still deletes its cache file', async () => {
@@ -459,6 +459,7 @@ it('sends UTF-8 text unchanged and invalidates an older pending file read', asyn
   const { store } = await import('../src/store');
   expect(store.pending!.name).toBe('message.txt');
   expect(store.pending!.mime).toBe('text/plain');
+  expect(store.pending!.kind).toBe('text');
   expect(new TextDecoder().decode(store.pending!.payload)).toBe(text);
   expect(el('stage').hidden).toBe(false);
   sender.exitSend();
@@ -493,7 +494,7 @@ it('shows verified text as literal content and copies the original text on web a
   await receiver();
   const text = 'ID3: 你好 👋\n<img src=x onerror=alert(1)>\n  keep spaces  ';
   const bytes = new TextEncoder().encode(text);
-  FakeWorker.all[0]!.emit(frame(bytes, fnv1a(bytes), 'message.txt'));
+  FakeWorker.all[0]!.emit(frame(bytes, fnv1a(bytes), 'message.txt', 'text'));
   const panel = el('result').children.find(x => x.className === 'received-text-panel')!;
   const content = panel.children.find(x => x.id === 'received-text')!;
   expect(content.value).toBe(text);
@@ -507,12 +508,13 @@ it('shows verified text as literal content and copies the original text on web a
   el('result').children.at(-1)!.click();
   const { store } = await import('../src/store');
   expect(store.pending!.payload).toEqual(bytes);
+  expect(store.pending!.kind).toBe('text');
 });
 
 it.each(['missing', 'denied'])('selects received text for manual copying when the clipboard is %s', async mode => {
   Object.assign(navigator, { clipboard: mode === 'missing' ? undefined : { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
   await receiver();
-  FakeWorker.all[0]!.emit(frame(new TextEncoder().encode('hello'), undefined, 'message.txt'));
+  FakeWorker.all[0]!.emit(frame(new TextEncoder().encode('hello'), undefined, 'message.txt', 'text'));
   const panel = el('result').children.find(x => x.className === 'received-text-panel')!;
   await panel.children.find(x => x.textContent === 'Copy text')!.click();
   const content = panel.children.find(x => x.id === 'received-text')!;
@@ -524,7 +526,7 @@ it.each(['missing', 'denied'])('selects received text for manual copying when th
 
 it('keeps invalid UTF-8 text downloadable without showing a corrupt text preview', async () => {
   await receiver();
-  FakeWorker.all[0]!.emit(frame(new Uint8Array([0xc3, 0x28]), undefined, 'invalid.txt'));
+  FakeWorker.all[0]!.emit(frame(new Uint8Array([0xc3, 0x28]), undefined, 'invalid.txt', 'text'));
   expect(el('result').children.some(x => x.className === 'received-text-panel')).toBe(false);
   expect(el('result').children.some(x => x.textContent === 'Save file')).toBe(true);
 });
@@ -533,7 +535,7 @@ it('does not apply a completed clipboard request to a receiver that has been clo
   let complete!: () => void;
   Object.assign(navigator, { clipboard: { writeText: () => new Promise<void>(resolve => { complete = resolve; }) } });
   const receive = await receiver();
-  FakeWorker.all[0]!.emit(frame(new TextEncoder().encode('hello'), undefined, 'message.txt'));
+  FakeWorker.all[0]!.emit(frame(new TextEncoder().encode('hello'), undefined, 'message.txt', 'text'));
   const panel = el('result').children.find(x => x.className === 'received-text-panel')!;
   const pending = panel.children.find(x => x.textContent === 'Copy text')!.click();
   receive.exitReceive(); complete(); await pending;
@@ -574,6 +576,7 @@ it.each([1, 415])('sends a %s-byte file in one static QR, including the exact ca
     const parsed = parseFrame(bytes)!;
     expect(parsed.header).toMatchObject({ k: 1, seq: 0, blockLen: length, totalLen: length, payloadFnv: fnv1a(payload) });
     expect(parsed.block).toEqual(payload);
+    expect(parsed.kind).toBe('file');
     expect(el('specs').textContent).toContain('Static code');
     sender.exitSend();
     await receiver(); FakeWorker.all[0]!.emit(bytes);
@@ -643,4 +646,102 @@ it('shows a recoverable error if static QR generation fails', async () => {
     expect(requestAnimationFrame).not.toHaveBeenCalled();
     sender.exitSend();
   } finally { create.mockRestore(); }
+});
+
+
+it.each(['notes.txt', 'message.txt', 'NOTES.TXT'])('receives a selected %s as a file and preserves its kind when forwarded', async name => {
+  const create = vi.spyOn(QRCode, 'create');
+  try {
+    const bytes = new TextEncoder().encode('相同的文字内容 👋\n');
+    const sender = await import('../src/send'); sender.enterSend();
+    el('file-input').files = [{ name, type: 'text/plain', size: bytes.length, arrayBuffer: async () => bytes.buffer }];
+    el('file-input').onchange?.(); await settle();
+    const encoded = (create.mock.calls[0]![0] as unknown as { data: Uint8Array }[])[0]!.data;
+    expect(parseFrame(encoded)!.kind).toBe('file');
+    sender.exitSend(); await receiver(); FakeWorker.all[0]!.emit(encoded);
+    expect(el('result').children.some(x => x.className === 'received-text-panel')).toBe(false);
+    expect(el('result').children.some(x => x.textContent === 'Your file has arrived.')).toBe(true);
+    expect(el('result').children.some(x => x.textContent === 'Save file')).toBe(true);
+    el('result').children.at(-1)!.click();
+    const { store } = await import('../src/store');
+    expect(store.pending).toMatchObject({ name, kind: 'file', payload: bytes });
+    sender.enterSend();
+    const forwarded = (create.mock.calls.at(-1)![0] as unknown as { data: Uint8Array }[])[0]!.data;
+    expect(parseFrame(forwarded)!.kind).toBe('file');
+    expect(parseFrame(forwarded)!.name).toBe(name);
+    sender.exitSend();
+  } finally { create.mockRestore(); }
+});
+
+it('treats old unmarked TXT transfers as files instead of guessing from the name', async () => {
+  await receiver();
+  FakeWorker.all[0]!.emit(frame(new TextEncoder().encode('legacy text'), undefined, 'message.txt'));
+  expect(el('result').children.some(x => x.className === 'received-text-panel')).toBe(false);
+  expect(el('result').children.some(x => x.textContent === 'Save file')).toBe(true);
+});
+
+it('does not mistake explicitly sent text for a file based on its leading magic bytes', async () => {
+  await receiver();
+  const text = 'GIF89a 这仍是输入的文字';
+  FakeWorker.all[0]!.emit(frame(new TextEncoder().encode(text), undefined, 'message.txt', 'text'));
+  const panel = el('result').children.find(x => x.className === 'received-text-panel')!;
+  expect(panel.children.find(x => x.id === 'received-text')!.value).toBe(text);
+  expect(el('result').children.some(x => x.className === 'received')).toBe(false);
+});
+
+it('rejects changed transfer kinds within one dynamic session and preserves text through forwarding', async () => {
+  await receiver();
+  const payload = new TextEncoder().encode('动态文字：'.repeat(100));
+  const enc = new LTEncoder(payload, Math.ceil(payload.length / 2), 1234);
+  const frames = Array.from({ length: 100 }, (_, seq) => ({ seq, b: enc.encode(seq) }));
+  // Choose a pair that completes the stream with no earlier frames required.
+  const first = frames.find(x => {
+    const probe = new LTDecoder(2, enc.blockLen, 1234, payload.length);
+    probe.addFrame(x.seq, x.b);
+    return probe.solvedCount === 1;
+  })!;
+  const second = frames.find(x => {
+    const probe = new LTDecoder(2, enc.blockLen, 1234, payload.length);
+    probe.addFrame(first.seq, first.b); probe.addFrame(x.seq, x.b);
+    return probe.isComplete;
+  })!;
+  const pack = (f: typeof first, kind: TransferKind) => packFrame({ sessionId: 1234, seq: f.seq, k: 2, blockLen: enc.blockLen, totalLen: payload.length, payloadFnv: fnv1a(payload) }, f.b, 'message.txt', kind);
+  FakeWorker.all[0]!.emit(pack(first, 'text'));
+  FakeWorker.all[0]!.emit(pack(second, 'file'));
+  expect(el('stats').textContent).toContain('invalid');
+  expect(el('result').children).toHaveLength(0);
+  FakeWorker.all[0]!.emit(pack(second, 'text'));
+  expect(el('stats').textContent).toContain('verified');
+  el('result').children.at(-1)!.click();
+  const { store } = await import('../src/store');
+  expect(store.pending!.kind).toBe('text');
+  const create = vi.spyOn(QRCode, 'create');
+  try {
+    const sender = await import('../src/send'); sender.enterSend();
+    expect(create.mock.calls.length).toBeGreaterThan(1);
+    for (const call of create.mock.calls) {
+      const encoded = (call[0] as unknown as { data: Uint8Array }[])[0]!.data;
+      expect(parseFrame(encoded)!.kind).toBe('text');
+    }
+    sender.exitSend();
+  } finally { create.mockRestore(); }
+});
+
+
+it('constrains the new L-capacity preset to a supported size when M is selected', async () => {
+  el('cfg-bytes').value = '2431'; el('cfg-ecc').value = 'M';
+  const sender = await import('../src/send'); sender.enterSend();
+  expect(el('cfg-bytes').value).toBe('2331');
+  expect(el('cfg-bytes').options.find(x => x.value === '2431')!.disabled).toBe(true);
+  sender.exitSend();
+});
+
+it('fills the former default QR version without increasing its module count or reducing its error correction', () => {
+  const make = (bytes: number) => QRCode.create([{ data: new Uint8Array(bytes), mode: 'byte' } as unknown as QRCode.QRCodeSegment], { errorCorrectionLevel: 'L' });
+  const previous = make(2331); const full = make(2431); const next = make(2432);
+  expect(previous.version).toBe(36);
+  expect(full.version).toBe(previous.version);
+  expect(full.modules.size).toBe(previous.modules.size);
+  expect(full.errorCorrectionLevel).toEqual(previous.errorCorrectionLevel);
+  expect(next.version).toBeGreaterThan(full.version);
 });

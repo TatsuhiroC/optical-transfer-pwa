@@ -1,4 +1,5 @@
-// Text uses the existing file protocol, so older receivers can save it as .txt.
+// Text carries an explicit kind flag; .txt files remain ordinary file transfers.
+// Older receivers can still save text as .txt.
 export const MAX_TEXT_BYTES = 4 * 1024 * 1024;
 export const TEXT_FILE_NAME = "message.txt";
 

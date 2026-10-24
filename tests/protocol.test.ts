@@ -13,7 +13,7 @@ import {
 } from "../shared/protocol";
 
 /** bytes/frame presets offered by the sender UI; payload = preset - overhead. */
-const FRAME_BYTES = [500, 1000, 1465, 1850, 2331, 2953];
+const FRAME_BYTES = [500, 1000, 1465, 1850, 2331, 2431, 2953];
 const blockLenFor = (frameBytes: number) => frameBytes - HEADER_LEN - 1 - NAME_FIELD_LEN;
 
 /** A complete header as the sender builds it, with the fields under test given. */
@@ -110,6 +110,7 @@ describe("frame layout", () => {
     const parsed = parseFrame(legacy);
     expect(parsed?.header.k).toBe(4);
     expect(parsed?.name).toBe("");
+    expect(parsed?.kind).toBe("file");
     expect([...parsed!.block]).toEqual([...block]);
   });
 
@@ -160,4 +161,23 @@ describe("fnv1a", () => {
     expect(fnv1a(new TextEncoder().encode("a"))).toBe(0xe40c292c);
     expect(fnv1a(new TextEncoder().encode("foobar"))).toBe(0xbf9cf968);
   });
+});
+
+
+it.each(['file', 'text'] as const)('carries the %s kind in existing padding, without sacrificing name or payload bytes', kind => {
+  const payload = new Uint8Array(2246).fill(42);
+  const name = 'a'.repeat(NAME_MAX);
+  const frame = packFrame(headerFor(1, payload.length, payload.length, fnv1a(payload)), payload, name, kind);
+  expect(frame.length).toBe(2331);
+  expect(frame[HEADER_LEN + NAME_FIELD_LEN]).toBe(kind === 'text' ? 1 : 0);
+  const parsed = parseFrame(frame)!;
+  expect(parsed.kind).toBe(kind);
+  expect(parsed.name).toBe(name);
+  expect(parsed.block).toEqual(payload);
+});
+
+it('rejects unknown type flags rather than displaying their content as text', () => {
+  const frame = packFrame(headerFor(1, 1, 1), new Uint8Array([42]), 'message.txt');
+  frame[HEADER_LEN + NAME_FIELD_LEN] = 2;
+  expect(parseFrame(frame)).toBeNull();
 });

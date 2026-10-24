@@ -67,7 +67,8 @@ let pumpTimer: number | undefined;
 let resizeHandler: (() => void) | undefined;
 let progressTimer: number | undefined;
 
-const FRAME_PRESETS = [500, 1000, 1465, 1850, 2331, 2953];
+// 2431 fills V36/L without adding modules or removing error correction.
+const FRAME_PRESETS = [500, 1000, 1465, 1850, 2331, 2431, 2953];
 const QR_CAPACITY = { L: 2953, M: 2331, Q: 1663, H: 1273 };
 function normalizeCapacity(): number {
   const ecc = cfgEcc.value as keyof typeof QR_CAPACITY;
@@ -112,6 +113,7 @@ function loadFile(file: File) {
         return;
       }
       store.pending = {
+        kind: "file",
         payload,
         name: file.name,
         mime: file.type || guessMime(file.name),
@@ -154,6 +156,7 @@ function loadText() {
   haltStream();
   pickSeq++; // a pending file read must not replace the chosen text
   store.pending = {
+    kind: "text",
     payload: new TextEncoder().encode(textInput.value),
     name: TEXT_FILE_NAME,
     mime: "text/plain",
@@ -304,6 +307,7 @@ function startStream() {
       { ...header, seq },
       encoder ? encoder.encode(seq) : payload,
       name,
+      p.kind,
     );
     const qr = QRCode.create(
       [{ data: bytes, mode: "byte" } as unknown as QRCode.QRCodeSegment],

@@ -26,7 +26,7 @@ it("the invitation QR opens the public home page rather than an APK internal ori
   expect(decoded[0]!.text).toBe(PUBLIC_HOME_URL);
 });
 
-it("actual QR PNG and ZXing WASM preserve binary frame bytes at 500 and 2953 bytes", async () => {
+it("actual QR PNG and ZXing WASM preserve binary frame bytes at small, default and maximum capacities", async () => {
   prepareZXingModule({
     overrides: {
       wasmBinary: readFileSync(
@@ -34,31 +34,35 @@ it("actual QR PNG and ZXing WASM preserve binary frame bytes at 500 and 2953 byt
       ),
     },
   });
-  for (const frameBytes of [500, 2953]) {
-    const n = frameBytes - 85;
-    const payload = new Uint8Array(n).map((_, i) => i % 256);
-    const frame = packFrame(
-      {
-        sessionId: 1234,
-        seq: 0,
-        k: 1,
-        blockLen: n,
-        totalLen: n,
-        payloadFnv: fnv1a(payload),
-      },
-      payload,
-      "报告.bin",
-    );
-    const png = await QRCode.toBuffer(
-      [{ data: frame, mode: "byte" } as unknown as QRCode.QRCodeSegment],
-      { scale: 6, margin: 4, errorCorrectionLevel: "L", maskPattern: 4 },
-    );
-    const decoded = await readBarcodes(png, {
-      formats: ["QRCode"],
-      maxNumberOfSymbols: 2,
-    });
-    expect(decoded.length).toBe(1);
-    expect([...decoded[0]!.bytes]).toEqual([...frame]);
-    expect(parseFrame(decoded[0]!.bytes)?.name).toBe("报告.bin");
+  for (const frameBytes of [500, 2431, 2953]) {
+    for (const kind of ["file", "text"] as const) {
+      const n = frameBytes - 85;
+      const payload = new Uint8Array(n).map((_, i) => i % 256);
+      const frame = packFrame(
+        {
+          sessionId: 1234,
+          seq: 0,
+          k: 1,
+          blockLen: n,
+          totalLen: n,
+          payloadFnv: fnv1a(payload),
+        },
+        payload,
+        "报告.bin",
+        kind,
+      );
+      const png = await QRCode.toBuffer(
+        [{ data: frame, mode: "byte" } as unknown as QRCode.QRCodeSegment],
+        { scale: 6, margin: 4, errorCorrectionLevel: "L", maskPattern: 4 },
+      );
+      const decoded = await readBarcodes(png, {
+        formats: ["QRCode"],
+        maxNumberOfSymbols: 2,
+      });
+      expect(decoded.length).toBe(1);
+      expect([...decoded[0]!.bytes]).toEqual([...frame]);
+      expect(parseFrame(decoded[0]!.bytes)?.name).toBe("报告.bin");
+      expect(parseFrame(decoded[0]!.bytes)?.kind).toBe(kind);
+    }
   }
 });

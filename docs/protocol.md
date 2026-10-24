@@ -4,9 +4,9 @@
 
 ## 工作原理 / How it works
 
-发送端将文件拆成数据块，使用 LT 喷泉码生成持续播放的动态二维码。每帧按序号和会话 ID 确定性选择数据块并异或。接收端允许丢帧、重复和乱序，收集足够的独立信息后还原文件并校验。
+文件或文字装得进当前单码容量时，显示一张静态二维码；否则发送端将内容拆成数据块，使用 LT 喷泉码生成持续播放的动态二维码。每帧按序号和会话 ID 确定性选择数据块并异或。接收端允许丢帧、重复和乱序，收集足够的独立信息后还原文件并校验。
 
-The sender splits the file into blocks and continuously displays LT fountain-coded QR frames. Each sequence number and session ID deterministically select the blocks to XOR. The receiver tolerates loss, duplicates and reordering, then reconstructs and verifies the file after collecting enough independent information.
+Content that fits the selected single-code capacity uses one static QR. Otherwise, the sender splits it into blocks and continuously displays LT fountain-coded QR frames. Each sequence number and session ID deterministically select the blocks to XOR. The receiver tolerates loss, duplicates and reordering, then reconstructs and verifies the file after collecting enough independent information.
 
 所需帧数取决于生成的方程，约 `K × 1.18` 是估算，不保证任意一组帧都能解码。没有反馈通道，发送端不知道接收端何时完成。
 
@@ -15,6 +15,26 @@ About `K × 1.18` frames is an estimate, not a guarantee that every frame set de
 帧头为 20 字节，当前格式额外包含 65 字节的文件名区域；文件名 UTF-8 字节最多 63。旧版不带文件名的帧仍可解析。具体实现见 [protocol.ts](../shared/protocol.ts) 和 [fountain.ts](../shared/fountain.ts)。
 
 The header is 20 bytes; the current format adds a 65-byte filename area containing up to 63 UTF-8 bytes. Legacy frames without a filename still parse. See [protocol.ts](../shared/protocol.ts) and [fountain.ts](../shared/fountain.ts).
+
+## 文字与文件 / Text and file identity
+
+类型由发送入口决定：选择文件为 `0`（包括 TXT），输入或粘贴文字为 `1`。标识放在文件名区域最后一个原有的空闲字节（偏移 84），每帧均携带，不增加帧长度或缩短文件名；中途加入、丢帧、转发均保留类型。同一会话不得更改类型，未知值会被拒绝。
+
+The source determines the kind: selecting a file uses `0` (including TXT); typing or pasting a message uses `1`. The flag reuses the last formerly unused byte of the filename area (offset 84) in every frame, without changing frame length or filename capacity. Late joins, frame loss and forwarding preserve the kind. A session cannot change kind; unknown values are rejected.
+
+新接收端把没有标识的旧数据视为文件，不通过 `.txt` 扩展名猜测文字。旧接收端仍可解析新帧，但不会识别这个类型区别；两端更新后才能获得完整行为。
+
+New receivers treat old unmarked data as files, without inferring messages from `.txt`. Older receivers still parse the new frames but do not recognize the distinction; update both ends for the complete behavior.
+
+## 字节效率 / Byte efficiency
+
+当前直接把二进制字节写入二维码，不经过 Base64、十六进制或 JSON。默认每帧 2431 字节包含 2346 字节内容和 85 字节帧头、名称及类型信息，应用帧内部的内容占约 96.50%；这不含二维码标准自身的纠错等开销。每帧保留文件参数和文件名，使接收端不依赖某个特定首帧。喷泉方程由会话 ID 和序号确定性重建，不另传源块索引列表。
+
+QR frames carry binary bytes directly, without Base64, hex or JSON. The default 2431-byte frame carries 2346 content bytes and 85 bytes of header, name and kind metadata: about 96.50% content within the application frame, excluding QR-standard error correction and other QR overhead. Repeating metadata avoids dependence on a particular first frame. The session ID and sequence number reconstruct fountain equations without sending an additional list of source-block indices.
+
+增加每帧容量不改变文件字节数，只会改变分帧数量和二维码密度；更小的格子可能降低手机识别成功率。当前不压缩传输内容。无损压缩需要比较完整压缩结果是否更小，并在接收端限制解压后的长度与资源消耗；短文本和已经压缩过的文件不保证获益。
+
+Increasing frame capacity does not shrink files; it changes frame count and QR density, potentially making smaller modules harder for phones to read. Transfer content is currently uncompressed. Lossless compression would need to compare the complete compressed size and bound decoded length and resource usage on the receiver; short text and already compressed files are not guaranteed to benefit.
 
 ## 文件与资源上限 / File and resource limits
 
@@ -26,13 +46,29 @@ Files are capped at **64 MiB** (67,108,864 bytes). The 65535-block limit makes t
 
 Decoder state has a 128 MiB budget and a `max(1024, 8 × K)` distinct-frame limit per session. Assembly, previews and native export require additional memory. Session geometry, checksum and name must agree; failed verification blocks export and forwarding.
 
+## 校验与纠错 / Integrity and recovery
+
+三层信息用途不同：每帧的 4 字节 FNV 值用于还原后的完整性核对，不能纠错；二维码标准的 Reed–Solomon 码修复一张码里的部分错误；喷泉码通过额外帧恢复漏掉的数据。喷泉码持续产生新帧，接收端信息足够且核对通过便完成；额外帧数不固定，也不保证固定百分比开销。
+
+These layers serve different purposes: the per-frame 4-byte FNV value checks the reconstructed content but cannot repair it; QR-standard Reed–Solomon codes repair some errors within a symbol; fountain frames recover missing data across symbols. The receiver completes when enough information arrives and integrity passes; the number of extra frames and their overhead are not fixed.
+
+2.0.6 把默认 L 级容量从 2331 增加至同一 V36 二维码能容纳的 2431 字节。格子数仍是 161 × 161，Reed–Solomon 纠错仍是 600 字节；每帧内容从 2246 增至 2346 字节，增加约 4.45%。这是用掉原有填充空间，不是减少纠错，也不是实测速度提升承诺。
+
+Version 2.0.6 fills the same V36/L symbol from 2331 to its 2431-byte capacity. It retains 161 × 161 modules and 600 Reed–Solomon codewords; content per frame rises from 2246 to 2346 bytes, about 4.45%. This replaces unused padding, without reducing error correction or claiming a measured speed increase.
+
+标准二维码仅提供 L/M/Q/H 四级纠错。现有会话要求数据块长度保持一致，改容量会重启会话。当前单向通道没有接收反馈，发送端无法自动判断对方需要更多还是更少冗余；不能把周期切换等级称为按接收质量自适应。
+
+Standard QR provides four correction levels, L/M/Q/H. The current session requires consistent block lengths; capacity changes restart it. Without receiver feedback, the sender cannot determine how much redundancy the other device needs; cycling levels alone would not adapt to reception quality.
+
+[二维码纠错说明 / QR error correction](https://www.qrcode.com/en/about/error_correction.html)
+
 ## 默认参数 / Defaults
 
 | 设置 / Setting | 默认 / Default |
 | --- | --- |
 | 显示二维码 / Codes displayed | 1 |
 | 发送帧率 / Sending cadence | 24 fps |
-| 每帧字节 / Bytes per frame | 2331 |
+| 每帧字节 / Bytes per frame | 2431 |
 | 纠错等级 / Error correction | L |
 | 采集宽度 / Capture width | 1280 px |
 | 请求摄像头帧率 / Requested camera rate | 60 fps，设备可能回退 / fallback may apply |

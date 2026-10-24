@@ -10,6 +10,7 @@ import {
   MAX_TRANSFER_BYTES,
   parseFrame,
   type FrameHeader,
+  type TransferKind,
 } from "../shared/protocol";
 import { setTransferActive, store } from "./store";
 import { ScreenWakeLock } from "./wake-lock";
@@ -48,7 +49,7 @@ const pulses = [...$("frame-pulses").children] as HTMLElement[];
 let pulseIdx = 0;
 let stream: MediaStream | null = null;
 let decoder: LTDecoder | null = null;
-let session: { header: FrameHeader; name: string } | null = null;
+let session: { header: FrameHeader; name: string; kind: TransferKind } | null = null;
 let entered = false;
 let running = false;
 let starting = false;
@@ -390,7 +391,7 @@ function onDecoded(bytes: Uint8Array) {
       header.sessionId,
       header.totalLen,
     );
-    session = { header: { ...header }, name: parsed.name };
+    session = { header: { ...header }, name: parsed.name, kind: parsed.kind };
     startTs = performance.now();
     lastFrameTs = startTs;
     pulseIdx = 0;
@@ -403,6 +404,7 @@ function onDecoded(bytes: Uint8Array) {
       first.blockLen !== header.blockLen ||
       first.totalLen !== header.totalLen ||
       first.payloadFnv !== header.payloadFnv ||
+      session.kind !== parsed.kind ||
       (session.name && parsed.name && session.name !== parsed.name)
     ) {
       setText(stats, "receive.badStream");
@@ -440,7 +442,7 @@ function onDecoded(bytes: Uint8Array) {
       failReceive("receive.hashFailed");
       return;
     }
-    finish(payload, seconds, session!.header.totalLen, session!.name);
+    finish(payload, seconds, session!.header.totalLen, session!.name, session!.kind);
   }
 }
 
@@ -559,6 +561,7 @@ function finish(
   seconds: number,
   totalLen: number,
   name: string,
+  kind: TransferKind,
 ) {
   done = true;
   stopCapture();
@@ -570,7 +573,9 @@ function finish(
   preview.style.display = "none";
   bar.style.width = "100%";
   progressPercent.textContent = "100%";
-  const { fileName, mime } = resolveFileMeta(payload, name);
+  const metadata = resolveFileMeta(payload, name);
+  const fileName = metadata.fileName;
+  const mime = kind === "text" ? "text/plain" : metadata.mime;
   const kb = Math.round(totalLen / 1024);
   const rate = seconds >= 0.1 ? (totalLen / 1024 / seconds).toFixed(1) : "—";
   setText(stats, "receive.summary", {
@@ -597,7 +602,7 @@ function finish(
   fileLabel.textContent = `${fileName} · ${kb} KB`;
   result.append(fileLabel);
 
-  const receivedText = decodeTextPreview(payload, mime);
+  const receivedText = kind === "text" ? decodeTextPreview(payload, mime) : null;
   if (receivedText !== null) {
     setText(heading, "receive.textDone");
     const textPanel = document.createElement("div");
@@ -712,7 +717,7 @@ function finish(
   fwd.className = "secondary-button forward-button";
   setText(fwd, "receive.forward");
   fwd.onclick = () => {
-    store.pending = { payload, name: fileName, mime };
+    store.pending = { payload, name: fileName, mime, kind };
     location.hash = "#/send";
   };
   result.append(fwd);

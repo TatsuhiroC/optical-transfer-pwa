@@ -1,7 +1,10 @@
 // Cross-mode state: a received file can be handed straight to the sender
 // ("send onward" relay), so the payload lives here, not inside either mode.
 
+import type { TransferKind } from "../shared/protocol";
+
 export interface PendingFile {
+  kind: TransferKind;
   payload: Uint8Array;
   name: string;
   mime: string;

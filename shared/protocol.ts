@@ -14,6 +14,7 @@
 //  16  u32  payloadFnv  FNV-1a of the whole file — verified on completion
 //  20  u8   nameLen     length of the file name (0 = legacy frame, no name)
 //  21  ...  name        UTF-8 file name, zero-padded to NAME_FIELD_LEN bytes
+//  84  u8   kind        0 = file, 1 = text (formerly zero padding)
 //        blockLen payload bytes follow the name field
 //
 // Why the name rides in EVERY frame: fountain frames arrive in any order and
@@ -38,6 +39,10 @@ export const MAX_BLOCK_LEN = 2953 - HEADER_LEN;
 export const MAX_TRANSFER_BYTES = 64 * 1024 * 1024;
 const MAGIC0 = 0xd1;
 const MAGIC1 = 0x0c;
+
+export type TransferKind = "file" | "text";
+// NAME_MAX leaves one byte in the fixed name area for the transfer kind.
+const KIND_OFFSET = HEADER_LEN + NAME_FIELD_LEN;
 
 export interface FrameHeader {
   sessionId: number;
@@ -67,7 +72,9 @@ export function encodeName(name: string): Uint8Array {
   return truncated;
 }
 
-export function packFrame(h: FrameHeader, block: Uint8Array, name?: string): Uint8Array {
+export function packFrame(
+  h: FrameHeader, block: Uint8Array, name?: string, kind: TransferKind = "file",
+): Uint8Array {
   const enc = name ? encodeName(name) : null;
   const nameLen = enc ? enc.length : 0;
   const out = new Uint8Array(HEADER_LEN + 1 + NAME_FIELD_LEN + block.length);
@@ -82,13 +89,14 @@ export function packFrame(h: FrameHeader, block: Uint8Array, name?: string): Uin
   dv.setUint32(16, h.payloadFnv, true);
   dv.setUint8(20, nameLen);
   if (enc) out.set(enc, HEADER_LEN + 1);
+  dv.setUint8(KIND_OFFSET, kind === "text" ? 1 : 0);
   out.set(block, HEADER_LEN + 1 + NAME_FIELD_LEN);
   return out;
 }
 
 export function parseFrame(
   bytes: Uint8Array,
-): { header: FrameHeader; block: Uint8Array; name: string } | null {
+): { header: FrameHeader; block: Uint8Array; name: string; kind: TransferKind } | null {
   if (bytes.length <= HEADER_LEN) return null;
   if (bytes[0] !== MAGIC0 || bytes[1] !== MAGIC1) return null;
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -102,17 +110,21 @@ export function parseFrame(
   };
   if (header.k === 0 || header.blockLen === 0 || header.totalLen === 0) return null;
   let name = "";
+  let kind: TransferKind = "file"; // old senders have no text/file distinction
   if (bytes.length === HEADER_LEN + header.blockLen) {
     // legacy frame — no name field
   } else {
     const nameLen = bytes[HEADER_LEN]!;
     if (nameLen > NAME_MAX) return null;
     if (bytes.length !== HEADER_LEN + 1 + NAME_FIELD_LEN + header.blockLen) return null;
+    const flag = bytes[KIND_OFFSET]!;
+    if (flag !== 0 && flag !== 1) return null;
+    kind = flag === 1 ? "text" : "file";
     if (nameLen > 0) {
       name = new TextDecoder().decode(bytes.subarray(HEADER_LEN + 1, HEADER_LEN + 1 + nameLen));
     }
   }
-  return { header, block: bytes.subarray(bytes.length - header.blockLen), name };
+  return { header, block: bytes.subarray(bytes.length - header.blockLen), name, kind };
 }
 
 export type HeaderReject = { kind: "invalid"; reason: "zero" | "blockLen" | "capacity" | "sparse" };

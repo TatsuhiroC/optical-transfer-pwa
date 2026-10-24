@@ -20,7 +20,7 @@ One device displays animated QR codes. The other scans them with its camera. Tra
 ## Features
 
 - **Photos and files**: choose from your phone’s library or drag a file in on desktop.
-- **Text messages**: type or paste up to 4 MiB of text; copy it on arrival or save it as a text file.
+- **Text messages**: type or paste up to 4 MiB of text and copy it on arrival; selected TXT documents remain file transfers.
 - **One code for small content**: files or text that fit the selected code capacity use a static QR; larger content uses animated codes.
 - **Phone and desktop transfers**: use a browser or install the Android APK.
 - **QR invitations**: tap “Invite” on the home page so a friend can scan and open the same site.
